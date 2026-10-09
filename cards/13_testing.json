@@ -1,0 +1,118 @@
+[
+ {
+  "id": "13_testing.ex01", "level": "easy",
+  "prompt": "Loop over `cases` and assert slugify(text) == want for each, with a failure message that shows the input, what came back, and what was wanted.",
+  "given": "cases = [(\"Hello, World!\", \"hello-world\"), (\"  Python 3.10  \", \"python-3-10\"), (\"a   b\", \"a-b\"), (\"\", \"\")]",
+  "setup": "import re as _re\ndef slugify(text):\n    return _re.sub(r\"[^a-z0-9]+\", \"-\", text.lower()).strip(\"-\")",
+  "answer": "for text, want in cases:\n    got = slugify(text)\n    assert got == want, f\"slugify({text!r}) = {got!r}, want {want!r}\"",
+  "check": "def _lower_only(text):\n    return text.lower()\ntry:\n    rerun(slugify=_lower_only)\nexcept AssertionError as e:\n    _msg = str(e)\nelse:\n    raise AssertionError(\"your loop passed a slugify that only lowercases\")\nassert _msg, \"give the assert a message: assert got == want, f'...'\"\nassert \"Hello, World!\" in _msg and \"hello, world!\" in _msg, f\"message should show the input and what came back; got {_msg!r}\"",
+  "why": "assert got == want, f\"...{got!r}...\": the message is what you read when it fails, so put the input and both values in it."
+ },
+ {
+  "id": "13_testing.ex02", "level": "easy",
+  "prompt": "Loop over `rows` and assert overlaps(a, b) is want, checking BOTH argument orders, each with a message.",
+  "given": "rows = [((9, 11), (10, 12), True), ((9, 10), (10, 11), False), ((9, 17), (10, 11), True)]",
+  "setup": "def overlaps(a, b):\n    return a[0] < b[1] and b[0] < a[1]",
+  "answer": "for a, b, want in rows:\n    assert overlaps(a, b) is want, f\"overlaps({a}, {b}) should be {want}\"\n    assert overlaps(b, a) is want, f\"overlaps({b}, {a}) should be {want}\"",
+  "check": "def _must_fail(**names):\n    label = names.pop(\"label\")\n    try:\n        rerun(**names)\n    except Exception:\n        return\n    raise AssertionError(f\"your checks PASSED a buggy version ({label}): that bug would ship\")\ndef _one_sided(a, b):\n    return a[0] <= b[0] < a[1]\ndef _inclusive(a, b):\n    return a[0] <= b[1] and b[0] <= a[1]\n_must_fail(overlaps=_one_sided, label=\"only checks whether b starts inside a: test overlaps(b, a) too\")\n_must_fail(overlaps=_inclusive, label=\"treats touching (9,10)/(10,11) as overlapping\")",
+  "why": "Overlap is symmetric but implementations often aren't: assert both overlaps(a, b) and overlaps(b, a)."
+ },
+ {
+  "id": "13_testing.ex03", "level": "easy",
+  "prompt": "Write `StackTests(unittest.TestCase)`: setUp builds `self.stack = Stack()`, and one test asserts that pop() on an empty stack raises IndexError.",
+  "given": "import unittest\n# Stack is provided: push(x), pop(), peek(), len(s), is_empty()",
+  "setup": "class Stack:\n    def __init__(self):\n        self._items = []\n    def push(self, x):\n        self._items.append(x)\n    def pop(self):\n        return self._items.pop()\n    def peek(self):\n        return self._items[-1]\n    def __len__(self):\n        return len(self._items)\n    def is_empty(self):\n        return not self._items\nclass _PopNone(Stack):\n    def pop(self):\n        return self._items.pop() if self._items else None",
+  "answer": "class StackTests(unittest.TestCase):\n    def setUp(self):\n        self.stack = Stack()\n    def test_pop_empty_raises(self):\n        with self.assertRaises(IndexError):\n            self.stack.pop()",
+  "check": "import io as _io, unittest as _ut\ndef _run(case):\n    suite = _ut.defaultTestLoader.loadTestsFromTestCase(case)\n    return _ut.TextTestRunner(stream=_io.StringIO(), verbosity=0).run(suite)\ndef _why(r):\n    bad = r.failures + r.errors\n    return bad[0][1].strip().splitlines()[-1] if bad else \"\"\n_r = _run(StackTests)\nassert _r.testsRun >= 1, \"no test_ methods ran: name them test_*\"\nassert _r.wasSuccessful(), f\"fails on a correct Stack: {_why(_r)}\"\nassert \"setUp\" in StackTests.__dict__, \"build the fixture in setUp(self)\"\nStack = _PopNone\nassert not _run(StackTests).wasSuccessful(), \"passed a Stack whose pop() returns None when empty: use self.assertRaises(IndexError)\"",
+  "why": "`with self.assertRaises(IndexError): self.stack.pop()`: the call goes INSIDE the with (or pass the function uncalled)."
+ },
+ {
+  "id": "13_testing.ex04", "level": "easy",
+  "prompt": "Make `mailer` a Mock whose send returns 'msg-123'. Assert send_welcome(user, mailer) returns it, and that send was called exactly once with to='ada@example.com', subject='Welcome!', body='Hi Ada' (keywords).",
+  "given": "from types import SimpleNamespace\nuser = SimpleNamespace(name=\"Ada\", email=\"ada@example.com\")",
+  "setup": "def send_welcome(user, mailer):\n    if not user.email:\n        raise ValueError(\"no email\")\n    return mailer.send(to=user.email, subject=\"Welcome!\", body=f\"Hi {user.name}\")",
+  "answer": "from unittest.mock import Mock\nmailer = Mock()\nmailer.send.return_value = \"msg-123\"\nassert send_welcome(user, mailer) == \"msg-123\"\nmailer.send.assert_called_once_with(to=\"ada@example.com\", subject=\"Welcome!\", body=\"Hi Ada\")",
+  "check": "def _must_fail(**names):\n    label = names.pop(\"label\")\n    try:\n        rerun(**names)\n    except Exception:\n        return\n    raise AssertionError(f\"your checks PASSED a buggy version ({label}): that bug would ship\")\nfrom unittest.mock import Mock as _Mock\nassert isinstance(mailer, _Mock), \"mailer should be a unittest.mock.Mock\"\ndef _sends_twice(user, mailer):\n    mailer.send(to=user.email, subject=\"Welcome!\", body=f\"Hi {user.name}\")\n    return mailer.send(to=user.email, subject=\"Welcome!\", body=f\"Hi {user.name}\")\ndef _wrong_subject(user, mailer):\n    return mailer.send(to=user.email, subject=\"Welcome\", body=f\"Hi {user.name}\")\ndef _drops_return(user, mailer):\n    mailer.send(to=user.email, subject=\"Welcome!\", body=f\"Hi {user.name}\")\n_must_fail(send_welcome=_sends_twice, label=\"sends the email twice\")\n_must_fail(send_welcome=_wrong_subject, label=\"subject 'Welcome' without the !\")\n_must_fail(send_welcome=_drops_return, label=\"returns None instead of the message id\")",
+  "why": "m.send.return_value configures it; m.send.assert_called_once_with(...) checks count AND exact args."
+ },
+ {
+  "id": "13_testing.ex05", "level": "medium",
+  "prompt": "Configure `fetch` as a Mock that raises ConnectionError twice and then returns 'page'. Assert fetch_with_retry(fetch, 'u') returns 'page' and that fetch was called exactly 3 times.",
+  "given": "from unittest.mock import Mock",
+  "setup": "def fetch_with_retry(fetch, url, attempts=3):\n    for i in range(attempts):\n        try:\n            return fetch(url)\n        except ConnectionError:\n            if i == attempts - 1:\n                raise",
+  "answer": "fetch = Mock(side_effect=[ConnectionError(), ConnectionError(), \"page\"])\nassert fetch_with_retry(fetch, \"u\") == \"page\"\nassert fetch.call_count == 3, fetch.call_count",
+  "check": "def _must_fail(**names):\n    label = names.pop(\"label\")\n    try:\n        rerun(**names)\n    except Exception:\n        return\n    raise AssertionError(f\"your checks PASSED a buggy version ({label}): that bug would ship\")\nassert isinstance(fetch, Mock), \"fetch should be a Mock\"\nassert fetch.call_count == 3, fetch.call_count\ndef _gives_up_early(fetch, url, attempts=3):\n    for i in range(attempts - 1):\n        try:\n            return fetch(url)\n        except ConnectionError:\n            if i == attempts - 2:\n                raise\ndef _no_retry(fetch, url, attempts=3):\n    return fetch(url)\n_must_fail(fetch_with_retry=_gives_up_early, label=\"gives up after 2 calls\")\n_must_fail(fetch_with_retry=_no_retry, label=\"never retries\")",
+  "why": "side_effect=[exc, exc, value]: each call takes the next item, raising exceptions and returning values; check .call_count."
+ },
+ {
+  "id": "13_testing.ex06", "level": "medium",
+  "prompt": "For each (hour, want) in `rows`, patch `clock.now` to return datetime(2026, 1, 1, hour) inside a with-block and assert clock.greeting() == want.",
+  "given": "from datetime import datetime\nfrom unittest.mock import patch\nrows = [(9, \"Good morning\"), (12, \"Good afternoon\"), (4, \"Good evening\")]\n# clock.greeting() reads clock.now().hour",
+  "setup": "from datetime import datetime as _dt\nfrom types import SimpleNamespace as _NS\ndef _greet(hour):\n    if 5 <= hour < 12:\n        return \"Good morning\"\n    if 12 <= hour < 18:\n        return \"Good afternoon\"\n    return \"Good evening\"\ndef _real_now():\n    return _dt.now()\nclock = _NS(now=_real_now)\nclock.greeting = lambda: _greet(clock.now().hour)",
+  "answer": "for hour, want in rows:\n    with patch.object(clock, \"now\", return_value=datetime(2026, 1, 1, hour)):\n        assert clock.greeting() == want, (hour, clock.greeting())",
+  "check": "def _must_fail(**names):\n    label = names.pop(\"label\")\n    try:\n        rerun(**names)\n    except Exception:\n        return\n    raise AssertionError(f\"your checks PASSED a buggy version ({label}): that bug would ship\")\nassert clock.now is _real_now, \"clock.now wasn't restored: use patch.object(...) as a with-block, not assignment\"\ndef _noon_is_morning(hour):\n    return \"Good morning\" if 5 <= hour <= 12 else _greet(hour)\nclock.greeting = lambda: _noon_is_morning(clock.now().hour)\n_must_fail(label=\"calls 12:00 'Good morning'\")",
+  "why": "patch.object(obj, \"attr\", return_value=...) swaps in a MagicMock for the with-block and restores it on exit."
+ },
+ {
+  "id": "13_testing.ex07", "level": "medium",
+  "prompt": "Write `GradeTests(unittest.TestCase)` with one test that loops over CASES and asserts letter_grade(score) == want, reporting EVERY failing row, not just the first.",
+  "given": "import unittest\nCASES = [(90, \"A\"), (89, \"B\"), (60, \"D\"), (59, \"F\")]\n# letter_grade(score) is provided",
+  "setup": "def _good_grade(score):\n    if not 0 <= score <= 100:\n        raise ValueError(score)\n    for cut, g in ((90, \"A\"), (80, \"B\"), (70, \"C\"), (60, \"D\")):\n        if score >= cut:\n            return g\n    return \"F\"\nletter_grade = _good_grade\ndef _two_bugs(score):\n    return {89: \"A\", 59: \"D\"}.get(score) or _good_grade(score)",
+  "answer": "class GradeTests(unittest.TestCase):\n    def test_table(self):\n        for score, want in CASES:\n            with self.subTest(score=score):\n                self.assertEqual(letter_grade(score), want)",
+  "check": "import io as _io, unittest as _ut\ndef _run(case):\n    suite = _ut.defaultTestLoader.loadTestsFromTestCase(case)\n    return _ut.TextTestRunner(stream=_io.StringIO(), verbosity=0).run(suite)\ndef _why(r):\n    bad = r.failures + r.errors\n    return bad[0][1].strip().splitlines()[-1] if bad else \"\"\n_r = _run(GradeTests)\nassert _r.testsRun >= 1 and _r.wasSuccessful(), f\"fails on a correct letter_grade: {_why(_r)}\"\nletter_grade = _two_bugs\n_r = _run(GradeTests)\nassert len(_r.failures) == 2, f\"{len(_r.failures)} failure(s) reported for 2 bad rows: wrap each row in `with self.subTest(score=score):`\"",
+  "why": "`with self.subTest(score=score):` inside the loop keeps going after a failing row and reports each one."
+ },
+ {
+  "id": "13_testing.ex08", "level": "medium",
+  "prompt": "Write a fake `InMemoryBookingRepo` with per-instance storage: add(booking) stores it by id; for_room(room_id) returns that room's bookings sorted by start as a NEW list.",
+  "given": "from dataclasses import dataclass\n@dataclass(frozen=True)\nclass Booking:\n    id: str\n    room_id: str\n    start: int\n    end: int",
+  "answer": "class InMemoryBookingRepo:\n    def __init__(self):\n        self._by_id = {}\n    def add(self, booking):\n        self._by_id[booking.id] = booking\n    def for_room(self, room_id):\n        return sorted((b for b in self._by_id.values() if b.room_id == room_id), key=lambda b: b.start)",
+  "check": "_r = InMemoryBookingRepo()\n_r.add(Booking(\"b2\", \"A\", 13, 14))\n_r.add(Booking(\"b1\", \"A\", 9, 10))\n_r.add(Booking(\"b3\", \"B\", 9, 10))\n_got = _r.for_room(\"A\")\nassert [b.id for b in _got] == [\"b1\", \"b2\"], f\"{_got}: that room only, sorted by start\"\n_got.clear()\nassert len(_r.for_room(\"A\")) == 2, \"for_room must return a NEW list: the caller's clear() emptied the repo\"\nassert InMemoryBookingRepo().for_room(\"A\") == [], \"bookings leaked into a new repo: create the dict in __init__, not at class level\"",
+  "why": "A fake keeps real state: storage made in __init__ (never class-level), and hand out copies (sorted() builds a new list)."
+ },
+ {
+  "id": "13_testing.ex09", "level": "medium",
+  "prompt": "Capture what print_report(rows, out) writes by passing an in-memory text stream, and assert the whole output equals `want`.",
+  "given": "rows = [(\"apple\", 3), (\"pear\", 10)]\nwant = \"apple: 3\\npear: 10\\ntotal: 13\\n\"",
+  "setup": "import io as _io, sys as _sys\n_sink = _io.StringIO()\ndef _good_report(rows, out=None):\n    out = _sys.stdout if out is None else out\n    if not rows:\n        print(\"(no rows)\", file=out)\n        return\n    for name, qty in rows:\n        print(f\"{name}: {qty}\", file=out)\n    print(f\"total: {sum(q for _, q in rows)}\", file=out)\nprint_report = _good_report",
+  "answer": "import io\nbuf = io.StringIO()\nprint_report(rows, buf)\nassert buf.getvalue() == want, repr(buf.getvalue())",
+  "check": "def _must_fail(**names):\n    label = names.pop(\"label\")\n    try:\n        rerun(**names)\n    except Exception:\n        return\n    raise AssertionError(f\"your checks PASSED a buggy version ({label}): that bug would ship\")\ndef _ignores_out(rows, out=None):\n    _good_report(rows, _sink)\ndef _no_total(rows, out=None):\n    for name, qty in rows:\n        print(f\"{name}: {qty}\", file=out)\ndef _no_final_newline(rows, out=None):\n    _buf = _io.StringIO()\n    _good_report(rows, _buf)\n    out.write(_buf.getvalue().rstrip(\"\\n\"))\n_must_fail(print_report=_ignores_out, label=\"ignores `out` and prints to stdout\")\n_must_fail(print_report=_no_total, label=\"drops the total line\")\n_must_fail(print_report=_no_final_newline, label=\"no trailing newline\")",
+  "why": "io.StringIO() as the stream, then compare buf.getvalue() (not .read(), which starts at the end) with ==."
+ },
+ {
+  "id": "13_testing.ex10", "level": "advanced",
+  "prompt": "Call merge_intervals(data) and assert both that the result equals `want` AND that the caller's `data` list was not modified.",
+  "given": "data = [(8, 10), (1, 3), (2, 6)]\nwant = [(1, 6), (8, 10)]",
+  "setup": "def _good_merge(intervals):\n    out = []\n    for s, e in sorted(intervals):\n        if out and s <= out[-1][1]:\n            out[-1] = (out[-1][0], max(out[-1][1], e))\n        else:\n            out.append((s, e))\n    return out\nmerge_intervals = _good_merge",
+  "answer": "before = list(data)\ngot = merge_intervals(data)\nassert got == want, got\nassert data == before, f\"input mutated: {before} -> {data}\"",
+  "check": "def _must_fail(**names):\n    label = names.pop(\"label\")\n    try:\n        rerun(**names)\n    except Exception:\n        return\n    raise AssertionError(f\"your checks PASSED a buggy version ({label}): that bug would ship\")\ndef _sorts_in_place(intervals):\n    intervals.sort()\n    return _good_merge(intervals)\n_must_fail(merge_intervals=_sorts_in_place, data=[(8, 10), (1, 3), (2, 6)],\n           label=\"sorts the caller's list in place (if you saw this, `before` must be a COPY: list(data))\")",
+  "why": "Snapshot a COPY (before = list(data)) then assert data == before: `before = data` is an alias and can't see mutation."
+ },
+ {
+  "id": "13_testing.ex11", "level": "advanced",
+  "prompt": "Write a `fresh()` helper returning LRUCache(2) with a=1 then b=2 put in. Then two scenarios: (1) get('a'), put('c', 3): 'b' is evicted (check with `is None`), a and c remain; (2) put('b', 20) on a fresh full cache evicts nothing (len 2, a still 1, b now 20).",
+  "given": "# LRUCache(capacity) is provided: get(k) -> value or None, put(k, v), len(c)",
+  "setup": "from collections import OrderedDict as _OD\nclass LRUCache:\n    def __init__(self, capacity):\n        if capacity < 1:\n            raise ValueError(\"capacity must be >= 1\")\n        self.cap, self.d = capacity, _OD()\n    def get(self, k):\n        if k not in self.d:\n            return None\n        self.d.move_to_end(k)\n        return self.d[k]\n    def put(self, k, v):\n        if k in self.d:\n            self.d.move_to_end(k)\n        self.d[k] = v\n        if len(self.d) > self.cap:\n            self.d.popitem(last=False)\n    def __len__(self):\n        return len(self.d)\nclass _NoRefresh(LRUCache):\n    def get(self, k):\n        return self.d.get(k)\nclass _EvictsOnUpdate(LRUCache):\n    def put(self, k, v):\n        if len(self.d) >= self.cap:\n            self.d.popitem(last=False)\n        self.d[k] = v\n        self.d.move_to_end(k)",
+  "answer": "def fresh():\n    c = LRUCache(2)\n    c.put(\"a\", 1)\n    c.put(\"b\", 2)\n    return c\nc = fresh(); c.get(\"a\"); c.put(\"c\", 3)\nassert c.get(\"b\") is None and c.get(\"a\") == 1 and c.get(\"c\") == 3\nc = fresh(); c.put(\"b\", 20)\nassert len(c) == 2 and c.get(\"a\") == 1 and c.get(\"b\") == 20",
+  "check": "def _must_fail(**names):\n    label = names.pop(\"label\")\n    try:\n        rerun(**names)\n    except Exception:\n        return\n    raise AssertionError(f\"your checks PASSED a buggy version ({label}): that bug would ship\")\n_must_fail(LRUCache=_NoRefresh, label=\"get() doesn't refresh recency\")\n_must_fail(LRUCache=_EvictsOnUpdate, label=\"checks size before looking up the key, so updating at capacity evicts\")",
+  "why": "One small scenario per behavior from a fresh() helper; missing key is `is None`; updating at capacity must not evict."
+ },
+ {
+  "id": "13_testing.ex12", "level": "advanced",
+  "prompt": "Build `rl = RateLimiter(limit=1, window=10, clock=...)` with a fake clock you move by hand (never sleep). Assert allow('k') is True at t=0, False at t=9.999, and True again at exactly t=10.0.",
+  "given": "# RateLimiter(limit, window, clock=time.monotonic) is provided; clock is a zero-arg callable returning seconds",
+  "setup": "import time as _time\nfrom collections import defaultdict as _dd, deque as _dq\nclass RateLimiter:\n    def __init__(self, limit, window, clock=_time.monotonic):\n        self.limit, self.window, self.clock = limit, window, clock\n        self.hits = _dd(_dq)\n    def _expired(self, age):\n        return age >= self.window\n    def allow(self, key):\n        now, q = self.clock(), self.hits[key]\n        while q and self._expired(now - q[0]):\n            q.popleft()\n        if len(q) < self.limit:\n            q.append(now)\n            return True\n        return False\nclass _InclusiveEdge(RateLimiter):\n    def _expired(self, age):\n        return age > self.window\nclass _IgnoresClock(RateLimiter):\n    def __init__(self, limit, window, clock=None):\n        super().__init__(limit, window, _time.monotonic)",
+  "answer": "now = [0.0]\nrl = RateLimiter(limit=1, window=10, clock=lambda: now[0])\nassert rl.allow(\"k\") is True\nnow[0] = 9.999\nassert rl.allow(\"k\") is False, \"still inside the window\"\nnow[0] = 10.0\nassert rl.allow(\"k\") is True, \"a request exactly `window` old no longer counts\"",
+  "check": "def _must_fail(**names):\n    label = names.pop(\"label\")\n    try:\n        rerun(**names)\n    except Exception:\n        return\n    raise AssertionError(f\"your checks PASSED a buggy version ({label}): that bug would ship\")\n_must_fail(RateLimiter=_InclusiveEdge, label=\"a request exactly `window` old still counts (<= instead of <)\")\n_must_fail(RateLimiter=_IgnoresClock, label=\"ignores the injected clock\")",
+  "why": "Inject the clock (lambda: now[0] or a FakeClock with __call__) and probe both sides of the exact window edge."
+ },
+ {
+  "id": "13_testing.ex13", "level": "advanced",
+  "prompt": "TDD steps 1 and 4 as plain checks (no pytest): a fresh PriorityQueue().pop() must raise IndexError; then push 'zed', 'amy', 'kim' all at priority 3 and assert they pop in insertion order.",
+  "given": "# PriorityQueue is provided: push(item, priority), pop()",
+  "setup": "import heapq as _hq, itertools as _it\nclass PriorityQueue:\n    def __init__(self):\n        self._heap, self._count = [], _it.count()\n    def push(self, item, priority):\n        _hq.heappush(self._heap, (priority, next(self._count), item))\n    def pop(self):\n        return _hq.heappop(self._heap)[2]\nclass _AlphaTies(PriorityQueue):\n    def push(self, item, priority):\n        _hq.heappush(self._heap, (priority, item, item))\nclass _PopNone(PriorityQueue):\n    def pop(self):\n        return _hq.heappop(self._heap)[2] if self._heap else None",
+  "answer": "pq = PriorityQueue()\ntry:\n    pq.pop()\nexcept IndexError:\n    pass\nelse:\n    raise AssertionError(\"pop() on an empty queue should raise IndexError\")\nfor item in [\"zed\", \"amy\", \"kim\"]:\n    pq.push(item, 3)\nassert [pq.pop() for _ in range(3)] == [\"zed\", \"amy\", \"kim\"]",
+  "check": "def _must_fail(**names):\n    label = names.pop(\"label\")\n    try:\n        rerun(**names)\n    except Exception:\n        return\n    raise AssertionError(f\"your checks PASSED a buggy version ({label}): that bug would ship\")\n_must_fail(PriorityQueue=_AlphaTies, label=\"breaks ties by item (alphabetical), not insertion order\")\n_must_fail(PriorityQueue=_PopNone, label=\"pop() on empty returns None\")",
+  "why": "try/except/else is the pytest.raises stand-in; pick tie items whose alphabetical order differs from insertion order."
+ }
+]

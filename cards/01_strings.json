@@ -1,0 +1,98 @@
+[
+ {
+  "id": "01_strings.ex01", "level": "easy",
+  "prompt": "Normalize the raw REPL input into `cmd`: no surrounding whitespace or newline, lowercase.",
+  "given": "raw = '  LIST  \\n'",
+  "answer": "cmd = raw.strip().lower()",
+  "check": "assert cmd == 'list'",
+  "why": "strip() with no args removes spaces, tabs and newlines from both ends."
+ },
+ {
+  "id": "01_strings.ex02", "level": "easy",
+  "prompt": "Build `out`: the uppercase first letter of each word followed by a dot. Runs of spaces must not produce empty words.",
+  "given": "full_name = '  grace   brewster  hopper '",
+  "answer": "out = \"\".join(w[0].upper() + \".\" for w in full_name.split())",
+  "check": "assert out == 'G.B.H.'",
+  "why": "split() with NO argument collapses whitespace runs and drops empties; split(' ') does not."
+ },
+ {
+  "id": "01_strings.ex03", "level": "easy",
+  "prompt": "Set `city` to `raw` with whitespace collapsed to single spaces and each word capitalized.",
+  "given": "raw = '  new   YORK '",
+  "answer": "city = \" \".join(w.capitalize() for w in raw.split())",
+  "check": "assert city == 'New York'",
+  "why": "capitalize() also lowercases the rest of the word, so YORK becomes York."
+ },
+ {
+  "id": "01_strings.ex04", "level": "easy",
+  "prompt": "Split `line` into `cmd`, `model`, `prompt`. The prompt keeps its inner spacing exactly; ignore leading whitespace. (All three parts are present here.)",
+  "given": "line = '  run phi3:mini tell me  a joke'",
+  "answer": "cmd, model, prompt = line.lstrip().split(\" \", maxsplit=2)",
+  "check": "assert (cmd, model, prompt) == ('run', 'phi3:mini', 'tell me  a joke')",
+  "why": "maxsplit=2 stops after two splits so the rest stays verbatim; lstrip first or the first part is ''."
+ },
+ {
+  "id": "01_strings.ex05", "level": "medium",
+  "prompt": "Shell-style split `line` into `tokens` (quoted text stays one token). If the quotes are unbalanced, `tokens` must be None instead of crashing.",
+  "given": "import shlex\nline = 'add \"New York --unit C'",
+  "answer": "try:\n    tokens = shlex.split(line)\nexcept ValueError:\n    tokens = None",
+  "check": "assert tokens is None, tokens\nrerun(line='add \"New York\" --unit C')\nassert tokens == ['add', 'New York', '--unit', 'C'], tokens",
+  "why": "shlex.split raises ValueError ('No closing quotation') on unbalanced quotes."
+ },
+ {
+  "id": "01_strings.ex06", "level": "medium",
+  "prompt": "Format `row` with one f-string: name left-aligned in 12, size right-aligned in 5 with 1 decimal, then ' GB'.",
+  "given": "name, size = 'phi3:mini', 2.26",
+  "answer": "row = f\"{name:<12}{size:>5.1f} GB\"",
+  "check": "assert row == 'phi3:mini     2.3 GB', repr(row)",
+  "why": "Format spec is align, width, .precision, type: {x:>5.1f}."
+ },
+ {
+  "id": "01_strings.ex07", "level": "medium",
+  "prompt": "Set `ok` to True if `text` is a palindrome, ignoring case and anything that isn't a letter or digit.",
+  "given": "text = 'A man, a plan, a canal: Panama!'",
+  "answer": "chars = [c.casefold() for c in text if c.isalnum()]\nok = chars == chars[::-1]",
+  "check": "assert ok is True",
+  "why": "Filter with isalnum(), compare to its [::-1] reverse."
+ },
+ {
+  "id": "01_strings.ex08", "level": "medium",
+  "prompt": "Run-length encode `s` into `out` using itertools.groupby. Single characters get no count.",
+  "given": "from itertools import groupby\ns = 'aaabccdddd'",
+  "answer": "out = \"\"\nfor ch, grp in groupby(s):\n    n = len(list(grp))\n    out += ch if n == 1 else f\"{ch}{n}\"",
+  "check": "assert out == 'a3bc2d4', out",
+  "why": "groupby yields (key, iterator) for each run of equal items; len(list(grp)) counts the run."
+ },
+ {
+  "id": "01_strings.ex09", "level": "medium",
+  "prompt": "Walk `args` with an index: every '--name' consumes the NEXT arg as its value into `flags`; every other arg goes into `words`.",
+  "given": "args = ['New', 'York', '--unit', 'C']\nwords, flags = [], {}",
+  "answer": "i = 0\nwhile i < len(args):\n    if args[i].startswith(\"--\"):\n        flags[args[i].removeprefix(\"--\")] = args[i + 1]\n        i += 2\n    else:\n        words.append(args[i])\n        i += 1",
+  "check": "assert words == ['New', 'York'] and flags == {'unit': 'C'}, (words, flags)",
+  "why": "A while loop with a manual index can skip ahead by 2; a for loop can't."
+ },
+ {
+  "id": "01_strings.ex10", "level": "advanced",
+  "prompt": "Greedy word wrap: append each word to `current` if it still fits within `width` (single spaces), otherwise push `current` onto `lines` and start over. Flush at the end.",
+  "given": "text, width = 'the quick brown fox jumps', 10\nlines, current = [], ''",
+  "answer": "for word in text.split():\n    if current and len(current) + 1 + len(word) <= width:\n        current += \" \" + word\n    else:\n        if current:\n            lines.append(current)\n        current = word\nif current:\n    lines.append(current)",
+  "check": "assert lines == ['the quick', 'brown fox', 'jumps'], lines",
+  "why": "The +1 is the joining space; remember the final flush after the loop."
+ },
+ {
+  "id": "01_strings.ex11", "level": "advanced",
+  "prompt": "Replace each {{ key }} in `tpl` (any inner whitespace) with str(ctx[key]); leave unknown keys exactly as written. Use re.sub with a function. Result in `out`.",
+  "given": "import re\ntpl = 'Hi {{ name }}, {{count}} new, {{ x }}'\nctx = {'name': 'Jack', 'count': 3}",
+  "answer": "out = re.sub(r\"\\{\\{\\s*(\\w+)\\s*\\}\\}\", lambda m: str(ctx[m.group(1)]) if m.group(1) in ctx else m.group(0), tpl)",
+  "check": "assert out == 'Hi Jack, 3 new, {{ x }}', out",
+  "why": "re.sub accepts a function of the Match; group(0) is the whole match, group(1) the capture."
+ },
+ {
+  "id": "01_strings.ex12", "level": "advanced",
+  "prompt": "Parse `line` with re.fullmatch and named groups date, time, level (DEBUG|INFO|WARNING|ERROR), source (inside [...]) and message. Set `d` to the groupdict, or None if it doesn't match.",
+  "given": "import re\nline = '2026-09-14 10:03:22 ERROR [provider] Model not loaded: phi3'",
+  "answer": "m = re.fullmatch(r\"(?P<date>\\d{4}-\\d{2}-\\d{2}) (?P<time>\\d{2}:\\d{2}:\\d{2}) (?P<level>DEBUG|INFO|WARNING|ERROR) \\[(?P<source>[^\\]]+)\\] (?P<message>.*)\", line)\nd = m.groupdict() if m else None",
+  "check": "assert d == {'date': '2026-09-14', 'time': '10:03:22', 'level': 'ERROR', 'source': 'provider', 'message': 'Model not loaded: phi3'}, d",
+  "why": "(?P<name>...) names a group; groupdict() returns them all. fullmatch anchors both ends."
+ }
+]

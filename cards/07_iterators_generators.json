@@ -1,0 +1,116 @@
+[
+ {
+  "id": "07_iterators_generators.ex01", "level": "easy",
+  "prompt": "Set `first` to the first line whose 3rd whitespace-separated field is 'ERROR', or None. Stop reading at the match (`lines` may be endless); short lines must not crash.",
+  "given": "lines = iter([\n    \"2026-09-14 10:03:20 INFO [cli] start\",\n    \"\",\n    \"short line\",\n    \"2026-09-14 10:03:22 ERROR [provider] Model not loaded\",\n    \"2026-09-14 10:03:25 ERROR [cli] Unknown command: lst\",\n])",
+  "answer": "first = next((line for line in lines if line.split()[2:3] == [\"ERROR\"]), None)",
+  "check": "assert first == \"2026-09-14 10:03:22 ERROR [provider] Model not loaded\", first\nassert next(lines, None) == \"2026-09-14 10:03:25 ERROR [cli] Unknown command: lst\", \"kept reading past the first ERROR; stop at the match\"\nrerun(lines=iter([\"ERROR at start but wrong field\", \"x y\"]))\nassert first is None, f\"{first!r}: the level is the 3rd field, not anywhere in the line\"",
+  "why": "next(genexp, None) is Python's find-first: it stops at the match; split()[2:3] is [] on short lines, no IndexError."
+ },
+ {
+  "id": "07_iterators_generators.ex02", "level": "easy",
+  "prompt": "`records` is a generator. Build `report` = {'total': sum of tokens over ok records, 'max': largest ok tokens (0 if none), 'failed': number of not-ok records}.",
+  "given": "records = (r for r in [\n    {\"model\": \"phi3:mini\", \"tokens\": 120, \"ok\": True},\n    {\"model\": \"llama3:8b\", \"tokens\": 300, \"ok\": False},\n    {\"model\": \"llama3:8b\", \"tokens\": 250, \"ok\": True},\n    {\"model\": \"mixtral\", \"tokens\": 80, \"ok\": True},\n])",
+  "answer": "records = list(records)\nok = [r for r in records if r[\"ok\"]]\nreport = {\"total\": sum(r[\"tokens\"] for r in ok), \"max\": max((r[\"tokens\"] for r in ok), default=0), \"failed\": sum(1 for r in records if not r[\"ok\"])}",
+  "check": "assert report == {\"total\": 450, \"max\": 250, \"failed\": 1}, f\"{report}: a generator is empty after one pass; list() it first\"\nrerun(records=(r for r in [{\"model\": \"x\", \"tokens\": 5, \"ok\": False}]))\nassert report == {\"total\": 0, \"max\": 0, \"failed\": 1}, report",
+  "why": "A generator is exhausted after one pass (the 2nd pass silently sees nothing); list() it. max() of nothing needs default=."
+ },
+ {
+  "id": "07_iterators_generators.ex03", "level": "easy",
+  "prompt": "Write generator function `backoff(base, factor, cap, tries)` that yields `tries` delays: base, base*factor, base*factor**2, ..., each capped at `cap`.",
+  "given": "# list(backoff(1, 2, 10, 6)) -> [1, 2, 4, 8, 10, 10]",
+  "answer": "def backoff(base, factor, cap, tries):\n    for i in range(tries):\n        yield min(cap, base * factor ** i)",
+  "check": "import inspect\nassert inspect.isgenerator(backoff(1, 2, 10, 6)), \"use yield, don't return a list\"\nassert list(backoff(1, 2, 10, 6)) == [1, 2, 4, 8, 10, 10], list(backoff(1, 2, 10, 6))\nassert list(backoff(0.5, 3, 5, 3)) == [0.5, 1.5, 4.5], list(backoff(0.5, 3, 5, 3))\nassert list(backoff(1, 2, 10, 0)) == []",
+  "why": "Any yield in the body makes it a generator function; min(cap, ...) caps each value."
+ },
+ {
+  "id": "07_iterators_generators.ex04", "level": "easy",
+  "prompt": "The first line is a CSV header. Set `rows` to a list of dicts (every cell stripped), skipping blank lines. `lines` is an iterator, so no indexing; empty input gives [].",
+  "given": "lines = iter([\"model, latency_ms\\n\", \"phi3, 412\\n\", \"\\n\", \"llama3 , 380\\n\"])",
+  "answer": "it = iter(lines)\nheader = next(it, \"\")\nkeys = [k.strip() for k in header.split(\",\")]\nrows = [dict(zip(keys, (c.strip() for c in line.split(\",\")))) for line in it if line.strip()]",
+  "check": "assert rows == [{\"model\": \"phi3\", \"latency_ms\": \"412\"}, {\"model\": \"llama3\", \"latency_ms\": \"380\"}], rows\nrerun(lines=iter([]))\nassert rows == [], rows\nrerun(lines=iter([\"a,b\\n\"]))\nassert rows == [], rows",
+  "why": "header = next(it, default) peels one item off; a for loop over the same iterator resumes right after it."
+ },
+ {
+  "id": "07_iterators_generators.ex05", "level": "medium",
+  "prompt": "Set `ids` to the first `n` ids of the form f'{prefix}-001', f'{prefix}-002', ... that are not in `taken`. Count lazily; don't guess an upper bound.",
+  "given": "from itertools import count, islice\nprefix, taken, n = \"T\", {\"T-001\", \"T-003\"}, 3",
+  "answer": "candidates = (f\"{prefix}-{i:03d}\" for i in count(1))\nids = list(islice((c for c in candidates if c not in taken), n))",
+  "check": "assert ids == [\"T-002\", \"T-004\", \"T-005\"], ids\nrerun(taken={f\"T-{i:03d}\" for i in range(1, 500)}, n=1)\nassert ids == [\"T-500\"], ids\nrerun(taken=set(), n=0)\nassert ids == [], ids",
+  "why": "count(1) is endless; filter with a genexp and let islice(it, n) decide how many to pull."
+ },
+ {
+  "id": "07_iterators_generators.ex06", "level": "medium",
+  "prompt": "Set `call` to the 1-based call number at which the running total of `costs` first goes STRICTLY above `budget`, or None. `costs` may be endless, so stop reading once over.",
+  "given": "from itertools import accumulate\ncosts = iter([0.5, 1.25, 2.0, 0.75])\nbudget = 3.0",
+  "answer": "call = next((i for i, total in enumerate(accumulate(costs), start=1) if total > budget), None)",
+  "check": "assert call == 3, call\nrerun(costs=iter([0.25] * 100), budget=1.0)\nassert call == 5, call\nassert len(list(costs)) == 95, \"read past the call that went over budget; costs may be endless\"\nrerun(costs=iter([1.0, 2.0]), budget=3.0)\nassert call is None, f\"{call}: equal to the budget is not over it\"",
+  "why": "accumulate gives running totals lazily, enumerate(start=1) numbers them, next(..., None) stops at the first hit."
+ },
+ {
+  "id": "07_iterators_generators.ex07", "level": "medium",
+  "prompt": "Using groupby, set `by_room` to [(room, [who, ...]), ...] sorted by room, each room's people in start-time order. Don't mutate `bookings`.",
+  "given": "from itertools import groupby\nfrom operator import itemgetter\nbookings = [\n    {\"room\": \"B\", \"start\": \"10:00\", \"who\": \"Bo\"},\n    {\"room\": \"A\", \"start\": \"11:00\", \"who\": \"Di\"},\n    {\"room\": \"B\", \"start\": \"09:00\", \"who\": \"Cy\"},\n    {\"room\": \"A\", \"start\": \"09:00\", \"who\": \"Al\"},\n    {\"room\": \"C\", \"start\": \"13:00\", \"who\": \"Ed\"},\n]",
+  "answer": "ordered = sorted(bookings, key=itemgetter(\"room\", \"start\"))\nby_room = [(room, [b[\"who\"] for b in grp]) for room, grp in groupby(ordered, key=itemgetter(\"room\"))]",
+  "check": "assert by_room == [(\"A\", [\"Al\", \"Di\"]), (\"B\", [\"Cy\", \"Bo\"]), (\"C\", [\"Ed\"])], f\"{by_room}: groupby only merges ADJACENT keys; sort by (room, start) first\"\nassert [b[\"who\"] for b in bookings] == [\"Bo\", \"Di\", \"Cy\", \"Al\", \"Ed\"], \"bookings was mutated; use sorted(), not .sort()\"",
+  "why": "groupby only merges adjacent equal keys, so sort by the same key first; consume each group before advancing."
+ },
+ {
+  "id": "07_iterators_generators.ex08", "level": "medium",
+  "prompt": "Split the sorted, non-empty `ts` into `sessions` (a list of lists), starting a new session whenever the gap from the previous timestamp is MORE than `max_gap`.",
+  "given": "from itertools import pairwise\nts, max_gap = [0, 30, 50, 400, 420, 2000], 300",
+  "answer": "sessions = [[ts[0]]]\nfor prev, cur in pairwise(ts):\n    if cur - prev > max_gap:\n        sessions.append([cur])\n    else:\n        sessions[-1].append(cur)",
+  "check": "assert sessions == [[0, 30, 50], [400, 420], [2000]], sessions\nrerun(ts=[0, 300, 600])\nassert sessions == [[0, 300, 600]], f\"{sessions}: a gap of exactly max_gap stays in the session\"\nrerun(ts=[7])\nassert sessions == [[7]], sessions",
+  "why": "pairwise(xs) yields (xs[0], xs[1]), (xs[1], xs[2]), ...: consecutive deltas with no index math (3.10+)."
+ },
+ {
+  "id": "07_iterators_generators.ex09", "level": "medium",
+  "prompt": "Round-robin the lists in `queues` into `jobs`: one job from each queue in turn, skipping queues that ran out. Jobs can be ANY value, including None, 0 and ''.",
+  "given": "from itertools import chain, zip_longest\nqueues = [[1, 0], [None], [\"\", 2, 3]]",
+  "answer": "MISSING = object()\njobs = [j for j in chain.from_iterable(zip_longest(*queues, fillvalue=MISSING)) if j is not MISSING]",
+  "check": "assert jobs == [1, None, \"\", 0, 2, 3], f\"{jobs}: None/0/'' are real jobs; fill with a unique object() and filter with `is not`\"\nrerun(queues=[[\"a1\", \"a2\", \"a3\"], [\"b1\"], [\"c1\", \"c2\"]])\nassert jobs == [\"a1\", \"b1\", \"c1\", \"a2\", \"c2\", \"a3\"], jobs",
+  "why": "zip_longest pads short queues; a private object() sentinel can't collide with real values, so filter by identity."
+ },
+ {
+  "id": "07_iterators_generators.ex10", "level": "advanced",
+  "prompt": "Write generator `batched(iterable, n)` yielding tuples of up to n items (last may be shorter). Lazy: it must work on an endless iterator and pull only n items per batch.",
+  "given": "from itertools import count, islice\n# list(batched(\"ABCDEFG\", 3)) -> [(\"A\", \"B\", \"C\"), (\"D\", \"E\", \"F\"), (\"G\",)]",
+  "answer": "def batched(iterable, n):\n    it = iter(iterable)\n    while batch := tuple(islice(it, n)):\n        yield batch",
+  "check": "import inspect\nassert inspect.isgenerator(batched([1], 1)), \"use yield\"\ngot = list(islice(batched([1, 2, 3, 4, 5], 2), 4))\nassert got == [(1, 2), (3, 4), (5,)], f\"{got}: islice on a LIST restarts at index 0; call iter() once and share it\"\nassert list(batched(\"ABCDEFG\", 3)) == [(\"A\", \"B\", \"C\"), (\"D\", \"E\", \"F\"), (\"G\",)]\nsrc = iter(range(100))\nfirst = next(batched(src, 4))\nassert first == (0, 1, 2, 3) and next(src, None) == 4, \"the first batch should pull exactly 4 items, not the whole input\"\nassert list(islice(batched(count(), 3), 2)) == [(0, 1, 2), (3, 4, 5)], \"must work on an endless input\"",
+  "why": "One shared iter() so each islice continues where the last stopped; the walrus loop ends on the empty tuple."
+ },
+ {
+  "id": "07_iterators_generators.ex11", "level": "advanced",
+  "prompt": "Write recursive generator `walk(tree, prefix='')` yielding (path, size) for every file in the nested dict (a dict value is a folder), paths joined with '/', in dict order.",
+  "given": "tree = {\n    \"src\": {\"main.py\": 120, \"util\": {\"io.py\": 40, \"empty\": {}}},\n    \"README.md\": 10,\n    \"tests\": {\"test_io.py\": 30},\n}",
+  "answer": "def walk(tree, prefix=\"\"):\n    for name, value in tree.items():\n        path = f\"{prefix}/{name}\" if prefix else name\n        if isinstance(value, dict):\n            yield from walk(value, path)\n        else:\n            yield path, value",
+  "check": "import inspect\nassert inspect.isgenerator(walk(tree)), \"use yield / yield from\"\ngot = list(walk(tree))\nassert got == [(\"src/main.py\", 120), (\"src/util/io.py\", 40), (\"README.md\", 10), (\"tests/test_io.py\", 30)], f\"{got}: calling walk(...) alone does nothing; `yield from` it\"\nassert list(walk({})) == []",
+  "why": "yield from re-yields everything the recursive call produces; a bare walk(...) call just builds and drops a generator."
+ },
+ {
+  "id": "07_iterators_generators.ex12", "level": "advanced",
+  "prompt": "Subclass PageFetcher as `PageIterator(fetch)`: a one-shot iterator (__iter__ returns self) whose __next__ hands out items from self.buf, calling self.fill() while the buffer is empty, and ends the iteration once fill() returns False.",
+  "given": "# PageFetcher (defined for you): self.buf is a deque; self.fill() loads the NEXT page into\n# self.buf (the page may be empty) and returns False once there are no more pages.\npages = {None: ([\"a\", \"b\"], \"p2\"), \"p2\": ([], \"p3\"), \"p3\": ([\"c\"], None)}\ncalls = []\ndef fetch(token):\n    calls.append(token)\n    return pages[token]",
+  "setup": "from collections import deque\nclass PageFetcher:\n    def __init__(self, fetch):\n        self.fetch, self.buf, self.token, self.started = fetch, deque(), None, False\n    def fill(self):\n        if self.started and self.token is None:\n            return False\n        items, self.token = self.fetch(self.token)\n        self.started = True\n        self.buf.extend(items)\n        return True",
+  "answer": "class PageIterator(PageFetcher):\n    def __iter__(self):\n        return self\n    def __next__(self):\n        while not self.buf:\n            if not self.fill():\n                raise StopIteration\n        return self.buf.popleft()",
+  "check": "from itertools import islice\nit = PageIterator(fetch)\nassert calls == [], \"don't fetch until someone asks for an item\"\nassert iter(it) is it, \"__iter__ should return self\"\nassert (next(it), next(it)) == (\"a\", \"b\")\nassert calls == [None], f\"{calls}: page 2 fetched before page 1 was used up\"\nrest = list(islice(it, 5))\nassert rest == [\"c\"], f\"{rest}: keep filling past empty pages, then raise StopIteration\"\nassert next(it, \"END\") == \"END\", \"should keep raising StopIteration after the last page\"\nassert calls == [None, \"p2\", \"p3\"], calls",
+  "why": "__next__ raises StopIteration to end a for loop; use `while` (not `if`) so an empty page doesn't crash popleft()."
+ },
+ {
+  "id": "07_iterators_generators.ex13", "level": "advanced",
+  "prompt": "Set `errs` to the first `n` (source, message) pairs from ERROR lines, as a lazy pipeline over parse_all(lines): read only as many lines as needed (lines may be endless; n=0 reads nothing).",
+  "given": "from itertools import islice\n# parse_all(lines) (defined for you): generator of (level, source, message), skipping garbage lines.\nLOG = [\n    \"2026-09-14 10:03:20 INFO [cli] start\",\n    \"garbage\",\n    \"2026-09-14 10:03:22 ERROR [provider] Model not loaded: phi3\",\n    \"2026-09-14 10:03:21 WARNING [cache] stale entry\",\n    \"2026-09-14 10:03:25 ERROR [cli] Unknown command: lst\",\n    \"2026-09-14 10:03:26 INFO [cli] bye\",\n]\nlines, n = iter(LOG), 2",
+  "setup": "def parse_all(lines):\n    for line in lines:\n        parts = line.split(maxsplit=4)\n        if len(parts) == 5:\n            _d, _t, level, source, message = parts\n            yield level, source.strip(\"[]\"), message",
+  "answer": "errs = list(islice(((src, msg) for level, src, msg in parse_all(lines) if level == \"ERROR\"), n))",
+  "check": "assert errs == [(\"provider\", \"Model not loaded: phi3\"), (\"cli\", \"Unknown command: lst\")], errs\nassert next(lines, None) == LOG[5], \"read past the 2nd error; let islice decide how much to pull\"\nrerun(lines=iter(LOG), n=0)\nassert errs == [], errs\nassert next(lines, None) == LOG[0], \"n=0 should read nothing (islice(it, 0) pulls nothing)\"",
+  "why": "Chain generators and let the last stage (islice) pull; [...][:n] or a list() in the middle reads everything."
+ },
+ {
+  "id": "07_iterators_generators.ex14", "level": "advanced",
+  "prompt": "Write coroutine `running_average()`: priming it with next() yields None; after that each .send(x) returns the mean of all values sent so far.",
+  "given": "# avg = running_average(); next(avg) -> None; avg.send(10) -> 10.0; avg.send(20) -> 15.0",
+  "answer": "def running_average():\n    total = n = 0\n    average = None\n    while True:\n        x = yield average\n        total, n = total + x, n + 1\n        average = total / n",
+  "check": "import inspect\navg = running_average()\nassert inspect.isgenerator(avg), \"a coroutine is a generator function using `x = yield value`\"\nassert next(avg) is None, \"priming with next() should yield None\"\nassert avg.send(10) == 10.0\nassert avg.send(20) == 15.0\nassert avg.send(0) == 10.0\nother = running_average()\nnext(other)\nassert other.send(400) == 400.0, \"each coroutine keeps its own state\"\nassert avg.send(30) == 15.0",
+  "why": "`x = yield value` hands out value, pauses, and receives the next send(); prime with next() first."
+ }
+]

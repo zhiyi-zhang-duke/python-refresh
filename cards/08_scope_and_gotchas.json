@@ -1,0 +1,114 @@
+[
+ {
+  "id": "08_scope_and_gotchas.ex01", "level": "easy",
+  "prompt": "Define `load_model(name)` that sets the module-level LOADED_MODEL to `name` and returns the previous value.",
+  "given": "LOADED_MODEL = None",
+  "answer": "def load_model(name):\n    global LOADED_MODEL\n    previous, LOADED_MODEL = LOADED_MODEL, name\n    return previous",
+  "check": "assert load_model(\"phi3\") is None\nassert LOADED_MODEL == \"phi3\", f\"module LOADED_MODEL is {LOADED_MODEL!r}: did you use `global`?\"\nassert load_model(\"llama3\") == \"phi3\"\nassert LOADED_MODEL == \"llama3\", LOADED_MODEL",
+  "why": "Assigning a name anywhere in a function makes it local; `global X` rebinds the module's X."
+ },
+ {
+  "id": "08_scope_and_gotchas.ex02", "level": "easy",
+  "prompt": "Set `status`: 'load <requested>' if `current` is None, 'already loaded' if it equals `requested`, else 'switch <current> -> <requested>'.",
+  "given": "current = \"\".join([\"phi\", \"3:\", \"mini\"])   # built at runtime, like input()\nrequested = \"phi3:mini\"",
+  "answer": "if current is None:\n    status = f\"load {requested}\"\nelif current == requested:\n    status = \"already loaded\"\nelse:\n    status = f\"switch {current} -> {requested}\"",
+  "check": "assert status == \"already loaded\", f\"{status!r}: equal strings can be different objects, compare with ==\"\nrerun(current=None)\nassert status == \"load phi3:mini\", status\nrerun(current=\"llama3\")\nassert status == \"switch llama3 -> phi3:mini\", status",
+  "why": "`is` is identity: use it for None only; strings built at runtime need ==."
+ },
+ {
+  "id": "08_scope_and_gotchas.ex03", "level": "easy",
+  "prompt": "Set `ok` to True only when `answer` is 'y' or 'yes' (any case, surrounding whitespace ignored), else False.",
+  "given": "answer = \"  YES\\n\"",
+  "answer": "ok = answer.strip().lower() in {\"y\", \"yes\"}",
+  "check": "assert ok is True, f\"{ok!r}: `x == 'y' or 'yes'` parses as (x == 'y') or 'yes'\"\nfor a in (\"no\", \"\", \"es\", \"yess\"):\n    rerun(answer=a)\n    assert ok is False, f\"{a!r} -> {ok!r}: `x == 'y' or 'yes'` is always truthy; `in 'yes'` is a substring test\"",
+  "why": "Membership in a set of whole strings; `x == a or b` is (x == a) or b, and `in 'yes'` matches substrings."
+ },
+ {
+  "id": "08_scope_and_gotchas.ex04", "level": "easy",
+  "prompt": "Set `grid` to a `rows` x `cols` list of lists filled with `fill`, where every row is an independent list.",
+  "given": "rows, cols, fill = 3, 2, 0",
+  "answer": "grid = [[fill] * cols for _ in range(rows)]",
+  "check": "assert grid == [[0, 0], [0, 0], [0, 0]], grid\ngrid[0][0] = 1\nassert grid == [[1, 0], [0, 0], [0, 0]], f\"{grid}: [[0]*c]*r repeats ONE row object\"",
+  "why": "[[x] * c] * r aliases the same row r times; build each row in a comprehension."
+ },
+ {
+  "id": "08_scope_and_gotchas.ex05", "level": "medium",
+  "prompt": "Split `line` on whitespace into `cmd` (lowercased) and `args` (a list of the rest). A blank line gives cmd '' and args [].",
+  "given": "line = \"  Weather New York \"",
+  "answer": "cmd, *args = line.split() or [\"\"]\ncmd = cmd.lower()",
+  "check": "assert (cmd, args) == (\"weather\", [\"New\", \"York\"]), (cmd, args)\nrerun(line=\"list\")\nassert (cmd, args) == (\"list\", []), (cmd, args)\nfor blank in (\"\", \" \\t\\n\"):\n    rerun(line=blank)\n    assert (cmd, args) == (\"\", []), (cmd, args)",
+  "why": "cmd, *args = parts gives args as a (possibly empty) list, but needs at least one part: handle empty first."
+ },
+ {
+  "id": "08_scope_and_gotchas.ex06", "level": "medium",
+  "prompt": "Define `log_event(event, history=<no list passed>)` that appends event to history and returns it. With no history it starts a NEW list every call; a passed-in list (even an empty one) is appended to and returned.",
+  "answer": "def log_event(event, history=None):\n    if history is None:\n        history = []\n    history.append(event)\n    return history",
+  "check": "assert log_event(\"a\") == [\"a\"]\nassert log_event(\"b\") == [\"b\"], \"state leaked between calls: mutable default argument\"\nh = []\nassert log_event(\"x\", h) is h, \"append to the caller's list, even an empty one (`history or []` bug)\"\nassert h == [\"x\"], h",
+  "why": "Defaults are evaluated once at def time: use None and create the list inside; test `is None`, not truthiness."
+ },
+ {
+  "id": "08_scope_and_gotchas.ex07", "level": "medium",
+  "prompt": "Build `settings` with exactly the DEFAULTS keys: the user's value when present and not None (0 and '' are real values), else the default. Don't mutate DEFAULTS.",
+  "given": "DEFAULTS = {\"timeout\": 30, \"retries\": 3, \"prompt\": \"> \"}\nuser = {\"timeout\": 0, \"prompt\": \"\", \"retries\": None, \"extra\": 1}",
+  "answer": "settings = {k: d if user.get(k) is None else user[k] for k, d in DEFAULTS.items()}",
+  "check": "assert settings == {\"timeout\": 0, \"retries\": 3, \"prompt\": \"\"}, settings\nassert DEFAULTS == {\"timeout\": 30, \"retries\": 3, \"prompt\": \"> \"}, \"don't mutate DEFAULTS\"\nrerun(user={})\nassert settings == DEFAULTS, settings",
+  "why": "Falsy is not missing: `x or default` replaces 0 and ''; `user.get(k, d)` keeps an explicit None. Test `is None`."
+ },
+ {
+  "id": "08_scope_and_gotchas.ex08", "level": "medium",
+  "prompt": "Build `callbacks`: a dict mapping each label to a zero-arg lambda that returns 'clicked <label>'.",
+  "given": "labels = [\"save\", \"load\", \"quit\"]",
+  "answer": "callbacks = {label: (lambda label=label: f\"clicked {label}\") for label in labels}",
+  "check": "got = [callbacks[x]() for x in (\"save\", \"load\", \"quit\")]\nassert got == [\"clicked save\", \"clicked load\", \"clicked quit\"], f\"{got}: late-binding closure, bind with label=label\"",
+  "why": "Closures look up loop variables when CALLED; a default arg (label=label) captures the value now."
+ },
+ {
+  "id": "08_scope_and_gotchas.ex09", "level": "medium",
+  "prompt": "Define `make_rate_limiter(limit)` returning `allow()`: True for the first `limit` calls, False after. Each limiter keeps its own count.",
+  "answer": "def make_rate_limiter(limit):\n    used = 0\n    def allow():\n        nonlocal used\n        used += 1\n        return used <= limit\n    return allow",
+  "check": "a, b = make_rate_limiter(2), make_rate_limiter(1)\nassert [a(), a()] == [True, True]\nassert b() is True, \"limiters must not share a count\"\nassert [a(), b(), a()] == [False, False, False]\nassert make_rate_limiter(0)() is False",
+  "why": "`nonlocal used` lets the inner function rebind the enclosing variable; each call to the factory gets its own cell."
+ },
+ {
+  "id": "08_scope_and_gotchas.ex10", "level": "medium",
+  "prompt": "Join `args` with spaces into `city` and set `out` to f'{city}: {temp}F' using `provider.get_temp(city)`. If that raises the provider module's UnknownCity, `out` is 'unknown city: <city>'. Any other error must propagate.",
+  "given": "# `provider` is an injected module with get_temp(city) and UnknownCity\nargs = [\"New\", \"York\"]",
+  "setup": "import types\ndef _fake_provider():\n    provider = types.ModuleType(\"provider\")\n    class UnknownCity(Exception):\n        pass\n    temps = {\"New York\": 61, \"Durham\": 75}\n    def get_temp(city):\n        if city == \"Offline Town\":\n            raise ConnectionError(\"network down\")\n        if city not in temps:\n            raise UnknownCity(city)\n        return temps[city]\n    provider.UnknownCity, provider.get_temp = UnknownCity, get_temp\n    return provider\nprovider = _fake_provider()\ndel _fake_provider",
+  "answer": "city = \" \".join(args)\ntry:\n    out = f\"{city}: {provider.get_temp(city)}F\"\nexcept provider.UnknownCity:\n    out = f\"unknown city: {city}\"",
+  "check": "assert out == \"New York: 61F\", out\nrerun(args=[\"Narnia\"])\nassert out == \"unknown city: Narnia\", out\ntry:\n    rerun(args=[\"Offline\", \"Town\"])\nexcept ConnectionError:\n    pass\nelse:\n    raise AssertionError(f\"ConnectionError was swallowed (out={out!r}): catch only provider.UnknownCity\")",
+  "why": "The exception class is an attribute of the module (provider.UnknownCity); catch only what you can handle."
+ },
+ {
+  "id": "08_scope_and_gotchas.ex11", "level": "advanced",
+  "prompt": "Set `result` to a NEW config with the dotted `path` set to `value`, creating missing intermediate dicts. `config` (including everything nested in it) must be left untouched.",
+  "given": "config = {\"model\": {\"name\": \"phi3\", \"params\": {\"temp\": 0.7}}, \"tags\": [\"a\"]}\npath, value = \"model.params.temp\", 0.2",
+  "setup": "SNAPSHOT = {\"model\": {\"name\": \"phi3\", \"params\": {\"temp\": 0.7}}, \"tags\": [\"a\"]}",
+  "answer": "import copy\nresult = copy.deepcopy(config)\n*parents, last = path.split(\".\")\nnode = result\nfor key in parents:\n    node = node.setdefault(key, {})\nnode[last] = value",
+  "check": "assert result == {\"model\": {\"name\": \"phi3\", \"params\": {\"temp\": 0.2}}, \"tags\": [\"a\"]}, result\nassert config == SNAPSHOT, f\"original changed: {config} (shallow copy shares nested dicts)\"\nassert result[\"tags\"] is not config[\"tags\"], \"result shares a nested list with the original\"\nrerun(path=\"server.port\", value=8080)\nassert result[\"server\"] == {\"port\": 8080}, result",
+  "why": "dict(x) / x.copy() copy one level; copy.deepcopy before mutating nested structures."
+ },
+ {
+  "id": "08_scope_and_gotchas.ex12", "level": "advanced",
+  "prompt": "Define `drop_inactive(sessions, now)`: remove IN PLACE (the caller's list must change) every session not active at `now` (active means start <= now < end) and return how many were removed.",
+  "given": "sessions = [\n    {\"id\": 1, \"start\": 0, \"end\": 5},\n    {\"id\": 2, \"start\": 0, \"end\": 3},\n    {\"id\": 3, \"start\": 0, \"end\": 2},\n    {\"id\": 4, \"start\": 4, \"end\": 9},\n    {\"id\": 5, \"start\": 5, \"end\": 9},\n    {\"id\": 6, \"start\": 1, \"end\": 4},\n]",
+  "answer": "def drop_inactive(sessions, now):\n    keep = [s for s in sessions if s[\"start\"] <= now < s[\"end\"]]\n    removed = len(sessions) - len(keep)\n    sessions[:] = keep\n    return removed",
+  "check": "n = drop_inactive(sessions, 4)\nassert n == 4, f\"removed {n}: .remove() inside `for s in sessions` skips the next element\"\nassert [s[\"id\"] for s in sessions] == [1, 4], f\"{[s['id'] for s in sessions]}: mutate with sessions[:] = ..., rebinding the parameter doesn't reach the caller\"",
+  "why": "Never remove while iterating; build the keep list, then slice-assign xs[:] = keep to mutate in place."
+ },
+ {
+  "id": "08_scope_and_gotchas.ex13", "level": "advanced",
+  "prompt": "Set `out` to the UTC offset `minutes` formatted as '+HH:MM' or '-HH:MM'.",
+  "given": "minutes = -90",
+  "answer": "sign = \"-\" if minutes < 0 else \"+\"\nh, m = divmod(abs(minutes), 60)\nout = f\"{sign}{h:02d}:{m:02d}\"",
+  "check": "assert out == \"-01:30\", f\"{out}: divmod(-90, 60) is (-2, 30); take abs() first\"\nfor mins, want in ((330, \"+05:30\"), (-45, \"-00:45\"), (0, \"+00:00\"), (-600, \"-10:00\")):\n    rerun(minutes=mins)\n    assert out == want, (mins, out)",
+  "why": "// and % floor toward negative infinity: divmod the absolute value and add the sign yourself."
+ },
+ {
+  "id": "08_scope_and_gotchas.ex14", "level": "advanced",
+  "prompt": "Set `ids` to the ticket ids sorted by team Z->A, then title A->Z; exact ties keep input order. Don't reorder `tickets`.",
+  "given": "tickets = [\n    {\"id\": \"t1\", \"team\": \"api\", \"title\": \"b\"},\n    {\"id\": \"t2\", \"team\": \"web\", \"title\": \"z\"},\n    {\"id\": \"t3\", \"team\": \"api\", \"title\": \"a\"},\n    {\"id\": \"t4\", \"team\": \"web\", \"title\": \"c\"},\n    {\"id\": \"t5\", \"team\": \"api\", \"title\": \"a\"},\n    {\"id\": \"t6\", \"team\": \"db\", \"title\": \"m\"},\n]",
+  "answer": "by_title = sorted(tickets, key=lambda t: t[\"title\"])\nids = [t[\"id\"] for t in sorted(by_title, key=lambda t: t[\"team\"], reverse=True)]",
+  "check": "assert ids == [\"t4\", \"t2\", \"t6\", \"t3\", \"t5\", \"t1\"], f\"{ids}: sort by the secondary key first, then the primary (stable)\"\nassert [t[\"id\"] for t in tickets] == [\"t1\", \"t2\", \"t3\", \"t4\", \"t5\", \"t6\"], \"don't reorder the input\"",
+  "why": "Mixed-direction multi-key on strings: two stable sorts, secondary key first, then primary with reverse=True."
+ }
+]

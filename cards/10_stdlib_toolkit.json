@@ -1,0 +1,115 @@
+[
+ {
+  "id": "10_stdlib_toolkit.ex01", "level": "easy",
+  "prompt": "Set `last` to a list of the last `n` ERROR lines (3rd field == 'ERROR') of the one-pass stream `lines`, holding at most n lines in memory.",
+  "given": "LOG = [\n    \"2026-09-14 10:03:20 INFO [cli] start\",\n    \"2026-09-14 10:03:21 ERROR [provider] Model not loaded: phi3\",\n    \"\",\n    \"2026-09-14 10:03:22 WARNING [cache] stale entry\",\n    \"2026-09-14 10:03:23 ERROR [cli] Unknown command: lst\",\n    \"2026-09-14 10:03:24 ERROR [provider] Timeout after 30s\",\n    \"2026-09-14 10:03:25 INFO [cli] bye\",\n]\nlines, n = iter(LOG), 2",
+  "answer": "from collections import deque\nlast = list(deque((l for l in lines if l.split()[2:3] == [\"ERROR\"]), maxlen=n))",
+  "check": "assert last == [LOG[4], LOG[5]], last\nrerun(lines=iter(LOG), n=10)\nassert last == [LOG[1], LOG[4], LOG[5]], last\nrerun(lines=iter(LOG), n=0)\nassert last == [], f\"{last}: careful, xs[-0:] is the WHOLE list\"",
+  "why": "deque(iterable, maxlen=n) keeps only the last n items: a tail buffer in O(n) memory."
+ },
+ {
+  "id": "10_stdlib_toolkit.ex02", "level": "easy",
+  "prompt": "From `runs`, set `p50` to the median latency_ms, `fastest` to the model of the lowest-latency run, and `top3` to the models of the 3 lowest-latency runs (fastest first) without sorting the whole list.",
+  "given": "runs = [\n    {\"model\": \"phi3:mini\", \"latency_ms\": 412.5},\n    {\"model\": \"llama3:8b\", \"latency_ms\": 380.0},\n    {\"model\": \"mixtral\", \"latency_ms\": 951.25},\n    {\"model\": \"phi3:mini\", \"latency_ms\": 402.0},\n    {\"model\": \"llama3:8b\", \"latency_ms\": 377.5},\n    {\"model\": \"gemma2\", \"latency_ms\": 990.0},\n]",
+  "answer": "import heapq, statistics\np50 = statistics.median(r[\"latency_ms\"] for r in runs)\nfastest = min(runs, key=lambda r: r[\"latency_ms\"])[\"model\"]\ntop3 = [r[\"model\"] for r in heapq.nsmallest(3, runs, key=lambda r: r[\"latency_ms\"])]",
+  "check": "assert p50 == 407.25, f\"{p50}: median of an even count averages the middle two\"\nassert fastest == \"llama3:8b\", fastest\nassert top3 == [\"llama3:8b\", \"llama3:8b\", \"phi3:mini\"], top3",
+  "why": "min(xs, key=) returns the whole item; heapq.nsmallest(k, xs, key=) is top-k in O(n log k)."
+ },
+ {
+  "id": "10_stdlib_toolkit.ex03", "level": "easy",
+  "prompt": "Define NamedTuple `Benchmark` with fields model: str, latency_ms: float, ok: bool defaulting to True. Then set `b` by parsing `line` ('model, latency, status'; status 'ok' means ok=True).",
+  "given": "line = \"phi3:mini, 412.5, fail\"",
+  "answer": "from typing import NamedTuple\nclass Benchmark(NamedTuple):\n    model: str\n    latency_ms: float\n    ok: bool = True\nmodel, ms, status = [p.strip() for p in line.split(\",\")]\nb = Benchmark(model, float(ms), status == \"ok\")",
+  "check": "assert getattr(Benchmark, \"_fields\", None) == (\"model\", \"latency_ms\", \"ok\"), \"subclass typing.NamedTuple, fields in this order\"\nassert Benchmark(\"x\", 1.0).ok is True, \"ok should default to True\"\nassert b == (\"phi3:mini\", 412.5, False) and b.latency_ms == 412.5, b\ntry:\n    b.ok = True\nexcept AttributeError:\n    pass\nelse:\n    raise AssertionError(\"NamedTuple fields are read-only; did you use a dataclass?\")",
+  "why": "class X(NamedTuple) with annotated fields; defaults go last; it IS a tuple (immutable, unpackable, ==)."
+ },
+ {
+  "id": "10_stdlib_toolkit.ex04", "level": "easy",
+  "prompt": "Set `labels` to the bucket label of each value in `ms_list`. A value equal to a breakpoint belongs to the bucket ABOVE it (200 is 'ok').",
+  "given": "BREAKPOINTS = [200, 500, 1000]\nLABELS = [\"fast\", \"ok\", \"slow\", \"timeout\"]\nms_list = [0, 199.9, 200, 499, 500, 1000, 30000]",
+  "answer": "import bisect\nlabels = [LABELS[bisect.bisect_right(BREAKPOINTS, ms)] for ms in ms_list]",
+  "check": "assert labels == [\"fast\", \"fast\", \"ok\", \"ok\", \"slow\", \"timeout\", \"timeout\"], f\"{labels}: bisect_right puts an equal value AFTER the breakpoint\"",
+  "why": "LABELS[bisect_right(cuts, x)] is the bucket lookup; bisect_left would put 200 in 'fast'."
+ },
+ {
+  "id": "10_stdlib_toolkit.ex05", "level": "medium",
+  "prompt": "Set `trending` to the top `k` cities by how much their count GREW from `yesterday` to `today` (only cities that grew), as (city, growth) pairs, biggest first.",
+  "given": "yesterday = [\"Durham\", \"Raleigh\", \"Raleigh\", \"New York\", \"Cary\"]\ntoday = [\"Durham\"] * 3 + [\"New York\"] * 4 + [\"Raleigh\", \"Cary\", \"Austin\"]\nk = 2",
+  "answer": "from collections import Counter\ntrending = (Counter(today) - Counter(yesterday)).most_common(k)",
+  "check": "assert trending == [(\"New York\", 3), (\"Durham\", 2)], trending\nrerun(k=10)\nassert trending == [(\"New York\", 3), (\"Durham\", 2), (\"Austin\", 1)], f\"{trending}: shrank (Raleigh) or flat (Cary) must be left out\"",
+  "why": "Counter `-` drops counts <= 0 (subtract() keeps them); most_common(k) sorts by count desc."
+ },
+ {
+  "id": "10_stdlib_toolkit.ex06", "level": "medium",
+  "prompt": "Each stream in `streams` yields dicts already sorted by 'latency_ms'. Set `top` to the `k` fastest dicts overall, merging lazily (don't read or sort everything).",
+  "given": "# node_stream(i) (defined for you) yields {\"node\": f\"gpu-{i}\", \"latency_ms\": ms} for ms = i, i+3, i+6, ... (sorted)\nstreams = [node_stream(i) for i in range(3)]\nk = 4",
+  "setup": "pulled = []\ndef node_stream(i):\n    for ms in range(i, 3000, 3):\n        row = {\"node\": f\"gpu-{i}\", \"latency_ms\": ms}\n        pulled.append(row)\n        yield row",
+  "answer": "import heapq\nfrom itertools import islice\ntop = list(islice(heapq.merge(*streams, key=lambda r: r[\"latency_ms\"]), k))",
+  "check": "assert [(r[\"node\"], r[\"latency_ms\"]) for r in top] == [(\"gpu-0\", 0), (\"gpu-1\", 1), (\"gpu-2\", 2), (\"gpu-0\", 3)], top\nassert len(pulled) <= k + 3, f\"pulled {len(pulled)} rows to find {k}; heapq.merge lazily instead of sorting everything\"",
+  "why": "heapq.merge(*sorted_iterables, key=) is a lazy k-way merge; islice takes just the first k."
+ },
+ {
+  "id": "10_stdlib_toolkit.ex07", "level": "medium",
+  "prompt": "Build `totals`: whole minutes per session summed by the START day, keyed like 'Mon 09/14'. Sessions can span more than a day.",
+  "given": "FMT = \"%Y-%m-%d %H:%M\"\nsessions = [\n    (\"2026-09-14 10:03\", \"2026-09-14 11:30\"),\n    (\"2026-09-15 22:00\", \"2026-09-17 00:30\"),\n    (\"2026-09-14 13:00\", \"2026-09-14 13:45\"),\n    (\"2026-09-17 09:15\", \"2026-09-17 09:20\"),\n]",
+  "answer": "from datetime import datetime\ntotals = {}\nfor s, e in sessions:\n    start, end = datetime.strptime(s, FMT), datetime.strptime(e, FMT)\n    day = start.strftime(\"%a %m/%d\")\n    totals[day] = totals.get(day, 0) + int((end - start).total_seconds() // 60)",
+  "check": "assert totals == {\"Mon 09/14\": 132, \"Tue 09/15\": 1590, \"Thu 09/17\": 5}, f\"{totals}: Tue's session is 26.5h; delta.seconds drops whole days, use total_seconds()\"",
+  "why": "strptime parses, strftime formats; timedelta.seconds is only the 0..86399 part, total_seconds() includes days."
+ },
+ {
+  "id": "10_stdlib_toolkit.ex08", "level": "medium",
+  "prompt": "Pair each unordered matchup of `models` (order a-b, a-c, b-c) with the next (slot, room) place, filling every room of a slot before moving to the next slot. `schedule` = list of (a, b, slot, room).",
+  "given": "models = [\"a\", \"b\", \"c\"]\nrooms = [\"R1\", \"R2\"]\nslots = [\"10:00\", \"11:00\"]",
+  "answer": "from itertools import combinations, product\nschedule = [(a, b, s, r) for (a, b), (s, r) in zip(combinations(models, 2), product(slots, rooms))]",
+  "check": "assert schedule == [(\"a\", \"b\", \"10:00\", \"R1\"), (\"a\", \"c\", \"10:00\", \"R2\"), (\"b\", \"c\", \"11:00\", \"R1\")], f\"{schedule}: product(slots, rooms) varies rooms fastest\"\nrerun(models=[\"phi3\", \"llama3\", \"mixtral\", \"gemma2\"], slots=[\"9\", \"10\", \"11\"])\nassert len(schedule) == 6 and schedule[-1] == (\"mixtral\", \"gemma2\", \"11\", \"R2\"), schedule",
+  "why": "combinations = unordered pairs; product(slots, rooms) is nested loops with the LAST iterable varying fastest."
+ },
+ {
+  "id": "10_stdlib_toolkit.ex09", "level": "medium",
+  "prompt": "Memoize this recurrence as `count_ways(amount, coins)` (coins is a tuple) with functools: 1 if amount == 0; 0 if amount < 0 or no coins; else count_ways(amount - coins[0], coins) + count_ways(amount, coins[1:]).",
+  "given": "# count_ways(10, (1, 2, 5)) -> 10",
+  "answer": "from functools import lru_cache\n@lru_cache(maxsize=None)\ndef count_ways(amount, coins):\n    if amount == 0:\n        return 1\n    if amount < 0 or not coins:\n        return 0\n    return count_ways(amount - coins[0], coins) + count_ways(amount, coins[1:])",
+  "check": "assert hasattr(count_ways, \"cache_info\"), \"decorate with @lru_cache(maxsize=None) (or @cache)\"\nassert count_ways(10, (1, 2, 5)) == 10\ncount_ways.cache_clear()\nassert count_ways(100, (1, 5, 10, 25, 50)) == 292\nassert count_ways.cache_info().hits > 0, \"no cache hits: recurse into the decorated count_ways itself\"\nassert count_ways(300, (1, 5, 10, 25, 50)) == 9590\ntry:\n    count_ways(10, [1, 2, 5])\nexcept TypeError:\n    pass\nelse:\n    raise AssertionError(\"lru_cache args must be hashable; a list should raise TypeError\")",
+  "why": "@lru_cache(maxsize=None) memoizes on the args, which must be hashable (tuple, not list); cache_info() shows hits."
+ },
+ {
+  "id": "10_stdlib_toolkit.ex10", "level": "advanced",
+  "prompt": "BFS from `start`: set `steps` to the fewest moves to `goal`, or -1 if unreachable, using `neighbors(r, c)`.",
+  "given": "grid = [\n    \"...#....\",\n    \".#.#.##.\",\n    \".#...#..\",\n    \".####.#.\",\n    \"......#.\",\n]\nstart, goal = (0, 0), (4, 7)\ndef neighbors(r, c):   # open, in-bounds cells next to (r, c)\n    for nr, nc in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)):\n        if 0 <= nr < len(grid) and 0 <= nc < len(grid[0]) and grid[nr][nc] != \"#\":\n            yield nr, nc",
+  "answer": "from collections import deque\ndist = {start: 0}\nq = deque([start])\nwhile q:\n    node = q.popleft()\n    for nxt in neighbors(*node):\n        if nxt not in dist:\n            dist[nxt] = dist[node] + 1\n            q.append(nxt)\nsteps = dist.get(goal, -1)",
+  "check": "assert steps == 15, steps\nrerun(goal=(0, 4))\nassert steps == 8, steps\nrerun(grid=[\".#.\", \"##.\", \"...\"], start=(0, 0), goal=(2, 2))\nassert steps == -1, steps\nrerun(grid=[\".\" * 40] * 40, start=(0, 0), goal=(39, 39))\nassert steps == 78, f\"{steps}: popleft() makes a queue (BFS); pop() is a stack (DFS)\"",
+  "why": "deque + popleft() is the BFS queue; mark a node seen when you ENQUEUE it, not when you pop it."
+ },
+ {
+  "id": "10_stdlib_toolkit.ex11", "level": "advanced",
+  "prompt": "Write `get(key)`: return the stored value while it's fresh (age = now() - stored_at is < ttl); once stale, delete the entry and return None. A missing key returns None.",
+  "given": "t = [0.0]\nnow = lambda: t[0]   # injected clock: set t[0] to move time\nttl = 60\nstore = {}           # key -> (value, stored_at)\ndef put(key, value):\n    store[key] = (value, now())",
+  "answer": "def get(key):\n    if key not in store:\n        return None\n    value, stored_at = store[key]\n    if now() - stored_at < ttl:\n        return value\n    del store[key]",
+  "check": "put(\"ny\", 21)\nt[0] = 59.9\nassert get(\"ny\") == 21, \"still fresh just before ttl (use the injected now(), not time.time())\"\nassert get(\"durham\") is None\nt[0] = 60.0\nassert get(\"ny\") is None, \"expired at exactly ttl (fresh means age < ttl)\"\nassert \"ny\" not in store, \"delete the stale entry\"",
+  "why": "Store (value, timestamp) and compare against an injected clock so tests control time without sleeping."
+ },
+ {
+  "id": "10_stdlib_toolkit.ex12", "level": "advanced",
+  "prompt": "Push every (task, priority) from `jobs` onto a heapq list `h`, then pop them all into `order` (the 'job' names): lowest priority first, ties in insertion order. Tasks are dicts, which can't be compared with <.",
+  "given": "jobs = [({\"job\": \"deploy\"}, 2), ({\"job\": \"hotfix\"}, 1), ({\"job\": \"lint\"}, 2),\n        ({\"job\": \"backup\"}, 3), ({\"job\": \"alert\"}, 1)]",
+  "answer": "import heapq\nh = []\nfor seq, (task, prio) in enumerate(jobs):\n    heapq.heappush(h, (prio, seq, task))\norder = [heapq.heappop(h)[-1][\"job\"] for _ in range(len(h))]",
+  "check": "assert order == [\"hotfix\", \"alert\", \"deploy\", \"lint\", \"backup\"], f\"{order}: lower number first, ties by insertion order\"\nassert h == [], \"pop everything\"",
+  "why": "Push (priority, seq, item): the unique seq breaks ties FIFO so tuple comparison never reaches the item."
+ },
+ {
+  "id": "10_stdlib_toolkit.ex13", "level": "advanced",
+  "prompt": "Set `current` to the Status member for the string `status`, then apply each event via TRANSITIONS. An unknown status or an illegal (state, event) must raise ValueError; the message names the state's NAME and the event.",
+  "given": "from enum import Enum\nclass Status(Enum):\n    PENDING = \"pending\"\n    RUNNING = \"running\"\n    SUCCEEDED = \"succeeded\"\n    FAILED = \"failed\"\n    CANCELLED = \"cancelled\"\nTRANSITIONS = {\n    (Status.PENDING, \"start\"): Status.RUNNING, (Status.PENDING, \"cancel\"): Status.CANCELLED,\n    (Status.RUNNING, \"succeed\"): Status.SUCCEEDED, (Status.RUNNING, \"fail\"): Status.FAILED,\n    (Status.RUNNING, \"cancel\"): Status.CANCELLED, (Status.FAILED, \"retry\"): Status.PENDING,\n}\nstatus, events = \"pending\", [\"start\", \"fail\", \"retry\", \"start\", \"succeed\"]",
+  "answer": "current = Status(status)\nfor event in events:\n    if (current, event) not in TRANSITIONS:\n        raise ValueError(f\"can't {event!r} from {current.name}\")\n    current = TRANSITIONS[(current, event)]",
+  "check": "assert current is Status.SUCCEEDED, current\nrerun(status=\"running\", events=[\"cancel\"])\nassert current is Status.CANCELLED, current\nfor st, evs in ((\"succeeded\", [\"start\"]), (\"pending\", [\"succeed\"]), (\"bogus\", [])):\n    try:\n        rerun(status=st, events=evs)\n    except ValueError as e:\n        assert not evs or (st.upper() in str(e) and evs[0] in str(e)), f\"unhelpful message: {e}\"\n    else:\n        raise AssertionError(f\"{st!r} + {evs} should raise ValueError\")",
+  "why": "Status('pending') looks up by VALUE (ValueError if unknown); Status['PENDING'] is by NAME. Members are hashable dict keys."
+ },
+ {
+  "id": "10_stdlib_toolkit.ex14", "level": "advanced",
+  "prompt": "Set `text` to `job` as JSON with sorted keys, using a `default=` function that turns datetimes into isoformat() and Enum members into their .value. Anything else unserializable must still raise TypeError.",
+  "given": "import json\nfrom datetime import datetime\nfrom enum import Enum\nclass Status(Enum):\n    RUNNING = \"running\"\njob = {\"id\": 7, \"status\": Status.RUNNING, \"created_at\": datetime(2026, 9, 14, 10, 3), \"tags\": [\"gpu\"]}",
+  "answer": "def to_json(o):\n    if isinstance(o, datetime):\n        return o.isoformat()\n    if isinstance(o, Enum):\n        return o.value\n    raise TypeError(f\"{type(o).__name__} is not JSON serializable\")\ntext = json.dumps(job, default=to_json, sort_keys=True)",
+  "check": "assert text == '{\"created_at\": \"2026-09-14T10:03:00\", \"id\": 7, \"status\": \"running\", \"tags\": [\"gpu\"]}', text\ntry:\n    rerun(job={\"ids\": {1, 2}})\nexcept TypeError:\n    pass\nelse:\n    raise AssertionError(f\"a set should still raise TypeError, got {text}; don't fall back to str or None\")",
+  "why": "json.dumps(obj, default=fn) calls fn only for unserializable objects; end fn with raise TypeError, not default=str."
+ }
+]

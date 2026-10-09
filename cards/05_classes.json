@@ -1,0 +1,104 @@
+[
+ {
+  "id": "05_classes.ex01", "level": "easy",
+  "prompt": "Define class `Model(name, size_gb)` storing both plus `loaded = False`, with `load()` setting loaded to True and `describe()` returning 'phi3:mini (2.2 GB)', or 'phi3:mini (2.2 GB, loaded)' once loaded.",
+  "answer": "class Model:\n    def __init__(self, name, size_gb):\n        self.name, self.size_gb, self.loaded = name, size_gb, False\n    def load(self):\n        self.loaded = True\n    def describe(self):\n        suffix = \", loaded\" if self.loaded else \"\"\n        return f\"{self.name} ({self.size_gb} GB{suffix})\"",
+  "check": "m, other = Model(\"phi3:mini\", 2.2), Model(\"llama3:8b\", 4.7)\nassert m.loaded is False, m.loaded\nassert m.describe() == \"phi3:mini (2.2 GB)\", m.describe()\nm.load()\nassert m.describe() == \"phi3:mini (2.2 GB, loaded)\", m.describe()\nassert other.loaded is False, \"loading one Model must not load another\"",
+  "why": "Instance state is assigned on self in __init__; every method takes self first."
+ },
+ {
+  "id": "05_classes.ex02", "level": "easy",
+  "prompt": "Define class `Booking(room, start, end)` whose repr is `Booking('A', 9, 11)` (developer view, valid Python) and whose str is `Room A, 09:00-11:00` (user view).",
+  "answer": "class Booking:\n    def __init__(self, room, start, end):\n        self.room, self.start, self.end = room, start, end\n    def __repr__(self):\n        return f\"Booking({self.room!r}, {self.start!r}, {self.end!r})\"\n    def __str__(self):\n        return f\"Room {self.room}, {self.start:02d}:00-{self.end:02d}:00\"",
+  "check": "b = Booking(\"A\", 9, 11)\nassert repr(b) == \"Booking('A', 9, 11)\", repr(b)\nassert str(b) == \"Room A, 09:00-11:00\", str(b)\nassert f\"{b}\" == \"Room A, 09:00-11:00\", f\"{b}\"\nassert str([b]) == \"[Booking('A', 9, 11)]\", \"containers show each item's repr: \" + str([b])\nassert repr(Booking(\"O'Hare\", 9, 10)) == 'Booking(\"O\\'Hare\", 9, 10)', \"hand-written quotes break on O'Hare; use !r: \" + repr(Booking(\"O'Hare\", 9, 10))",
+  "why": "__repr__ uses {x!r} so Python picks the quotes; __str__ is for print/f-strings; containers use repr."
+ },
+ {
+  "id": "05_classes.ex03", "level": "easy",
+  "prompt": "Define class `Session(user)`: a class attribute `count` that counts every Session ever created, a per-instance `history` list, and `add(command)` appending to it.",
+  "answer": "class Session:\n    count = 0\n    def __init__(self, user):\n        self.user = user\n        self.history = []\n        Session.count += 1\n    def add(self, command):\n        self.history.append(command)",
+  "check": "s1, s2 = Session(\"jack\"), Session(\"becca\")\ns1.add(\"list\")\nassert s1.history == [\"list\"], s1.history\nassert s2.history == [], \"history is shared: a class-level [] is ONE list for every instance\"\nassert Session.count == 2, f\"Session.count is {Session.count}\"\nassert \"count\" not in vars(s1), \"self.count += 1 created a shadowing instance attr; bump Session.count\"",
+  "why": "Mutable state goes in __init__; bump shared counters via the class name, not self."
+ },
+ {
+  "id": "05_classes.ex04", "level": "easy",
+  "prompt": "Define class `ModelSpec(name, size_gb)` with a static `parse_size(text)` ('2.2GB' -> 2.2, case-insensitive, GB only) and an alternate constructor `from_line(line)` building one from 'phi3:mini 2.2GB' (ValueError unless exactly 2 parts). Subclasses calling from_line must get a subclass instance.",
+  "answer": "class ModelSpec:\n    def __init__(self, name, size_gb):\n        self.name, self.size_gb = name, size_gb\n    @staticmethod\n    def parse_size(text):\n        return float(text.strip().upper().removesuffix(\"GB\"))\n    @classmethod\n    def from_line(cls, line):\n        name, size = line.split()\n        return cls(name, cls.parse_size(size))",
+  "check": "s = ModelSpec.from_line(\"  phi3:mini 2.2GB \\n\")\nassert (s.name, s.size_gb) == (\"phi3:mini\", 2.2), vars(s)\nassert ModelSpec.parse_size(\"1.5gb\") == 1.5, ModelSpec.parse_size(\"1.5gb\")\nassert s.parse_size(\"1GB\") == 1.0, \"parse_size must work on an instance too (@staticmethod)\"\nclass LocalSpec(ModelSpec):\n    pass\nassert type(LocalSpec.from_line(\"x 1GB\")) is LocalSpec, \"build with cls(...), not ModelSpec(...)\"\ntry:\n    ModelSpec.from_line(\"phi3:mini\")\nexcept ValueError:\n    pass\nelse:\n    raise AssertionError(\"a one-part line should raise ValueError\")",
+  "why": "@staticmethod takes no self/cls; @classmethod alternate constructors return cls(...) so subclasses work."
+ },
+ {
+  "id": "05_classes.ex05", "level": "medium",
+  "prompt": "Define class `Room(capacity)` where `capacity` is a property: its setter raises ValueError unless the value is a positive int, and construction goes through the same check.",
+  "answer": "class Room:\n    def __init__(self, capacity):\n        self.capacity = capacity\n    @property\n    def capacity(self):\n        return self._capacity\n    @capacity.setter\n    def capacity(self, value):\n        if not isinstance(value, int) or value <= 0:\n            raise ValueError(f\"bad capacity: {value!r}\")\n        self._capacity = value",
+  "check": "r = Room(8)\nr.capacity = 12\nassert r.capacity == 12, r.capacity\nfor bad in (0, -3, \"8\"):\n    try:\n        r.capacity = bad\n    except ValueError:\n        pass\n    else:\n        raise AssertionError(f\"capacity = {bad!r} should raise ValueError\")\nassert r.capacity == 12, \"a rejected assignment must keep the old value\"\nassert isinstance(type(r).__dict__.get(\"capacity\"), property), \"capacity should be a @property\"\ntry:\n    Room(-1)\nexcept ValueError:\n    pass\nelse:\n    raise AssertionError(\"Room(-1) must raise: write self.capacity = capacity in __init__ so the setter runs\")",
+  "why": "@property getter + @capacity.setter storing self._capacity; __init__ assigns self.capacity so it validates."
+ },
+ {
+  "id": "05_classes.ex06", "level": "medium",
+  "prompt": "Define class `ModelRef(name, tag)` with value equality (name case-insensitive, tag case-sensitive) that also works as a set member / dict key. Comparing to a non-ModelRef must give False, not an error.",
+  "answer": "class ModelRef:\n    def __init__(self, name, tag):\n        self.name, self.tag = name.lower(), tag\n    def __eq__(self, other):\n        if not isinstance(other, ModelRef):\n            return NotImplemented\n        return (self.name, self.tag) == (other.name, other.tag)\n    def __hash__(self):\n        return hash((self.name, self.tag))",
+  "check": "a, b = ModelRef(\"Phi3\", \"mini\"), ModelRef(\"phi3\", \"mini\")\nassert a == b and not (a != b), \"same name (any case) + tag must be equal\"\nassert a != ModelRef(\"phi3\", \"MINI\"), \"tag is case-sensitive\"\ntry:\n    assert len({a, b, ModelRef(\"PHI3\", \"mini\")}) == 1, \"equal refs must hash equal\"\nexcept TypeError:\n    raise AssertionError(\"unhashable: defining __eq__ set __hash__ to None, add __hash__\") from None\nassert {a: \"small\"}[ModelRef(\"PHI3\", \"mini\")] == \"small\"\nassert (a == \"phi3:mini\") is False\nassert a.__eq__(\"phi3:mini\") is NotImplemented, \"return NotImplemented for other types, not False\"",
+  "why": "Defining __eq__ sets __hash__ = None; hash the same tuple you compare, and return NotImplemented for foreign types."
+ },
+ {
+  "id": "05_classes.ex07", "level": "medium",
+  "prompt": "Define `PerishableItem(InventoryItem)` adding `days_left`. Its value() is the parent's value() when days_left > 2, half of it at 1-2, and 0.0 at <= 0. Reuse the parent's __init__ and value(); don't recompute price * qty.",
+  "given": "class InventoryItem:\n    def __init__(self, sku, price, qty):\n        self.sku, self.price, self.qty = sku, price, qty\n    def value(self):\n        return self.price * self.qty",
+  "answer": "class PerishableItem(InventoryItem):\n    def __init__(self, sku, price, qty, days_left):\n        super().__init__(sku, price, qty)\n        self.days_left = days_left\n    def value(self):\n        if self.days_left <= 0:\n            return 0.0\n        return super().value() / (2 if self.days_left <= 2 else 1)",
+  "check": "p = PerishableItem(\"MILK\", 4.0, 3, days_left=5)\nassert (p.sku, p.price, p.qty) == (\"MILK\", 4.0, 3), \"call super().__init__(sku, price, qty)\"\nassert isinstance(p, InventoryItem)\nassert p.value() == 12.0, p.value()\nassert PerishableItem(\"A\", 4.0, 3, 2).value() == 6.0, PerishableItem(\"A\", 4.0, 3, 2).value()\nassert PerishableItem(\"A\", 4.0, 3, 0).value() == 0.0, PerishableItem(\"A\", 4.0, 3, 0).value()\nInventoryItem.value = lambda self: 100.0\nassert PerishableItem(\"A\", 1.0, 1, 5).value() == 100.0, \"reuse super().value() instead of recomputing price * qty\"",
+  "why": "super().__init__(...) for shared fields; super().method() inside an override reuses the parent's logic."
+ },
+ {
+  "id": "05_classes.ex08", "level": "medium",
+  "prompt": "Define abstract base `Provider` with class attribute `name = 'base'`, an abstract `fetch(city)`, and a concrete `report(city)` returning e.g. 'dict: Durham 21.5C' (self.name, city, temp to 1 decimal). Provider() and any subclass missing fetch must raise TypeError.",
+  "answer": "from abc import ABC, abstractmethod\nclass Provider(ABC):\n    name = \"base\"\n    @abstractmethod\n    def fetch(self, city): ...\n    def report(self, city):\n        return f\"{self.name}: {city} {self.fetch(city):.1f}C\"",
+  "check": "class Const(Provider):\n    name = \"constant\"\n    def fetch(self, city):\n        return 20\nassert Const().report(\"Anywhere\") == \"constant: Anywhere 20.0C\", Const().report(\"Anywhere\")\nclass Forgetful(Provider):\n    pass\nfor cls in (Provider, Forgetful):\n    try:\n        cls()\n    except TypeError:\n        pass\n    else:\n        raise AssertionError(f\"{cls.__name__}() should raise TypeError: subclass ABC + @abstractmethod\")",
+  "why": "Subclass ABC and mark fetch @abstractmethod; the TypeError fires at instantiation, not class definition."
+ },
+ {
+  "id": "05_classes.ex09", "level": "medium",
+  "prompt": "Define dataclass `Job(priority, name, tags)` sortable by (priority, name), where `tags` defaults to a fresh empty list per job and is ignored by == and ordering.",
+  "answer": "from dataclasses import dataclass, field\n@dataclass(order=True)\nclass Job:\n    priority: int\n    name: str\n    tags: list[str] = field(default_factory=list, compare=False)",
+  "check": "j = Job(1, \"chat\")\nj.tags.append(\"fast\")\nassert Job(2, \"embed\").tags == [], \"each Job needs its own tags list (default_factory=list)\"\nassert repr(Job(1, \"chat\")) == \"Job(priority=1, name='chat', tags=[])\", repr(Job(1, \"chat\"))\njobs = sorted([Job(2, \"b\"), Job(1, \"z\", [\"x\"]), Job(1, \"a\")])\nassert [(x.priority, x.name) for x in jobs] == [(1, \"a\"), (1, \"z\"), (2, \"b\")], jobs\nassert Job(1, \"a\", [\"x\"]) == Job(1, \"a\", [\"y\"]), \"tags must not affect == (compare=False)\"",
+  "why": "@dataclass(order=True) compares fields in definition order; mutable defaults need field(default_factory=list)."
+ },
+ {
+  "id": "05_classes.ex10", "level": "medium",
+  "prompt": "Define an immutable, hashable dataclass `Slot(start, end)` (ints) that raises ValueError at construction unless start < end.",
+  "answer": "from dataclasses import dataclass\n@dataclass(frozen=True)\nclass Slot:\n    start: int\n    end: int\n    def __post_init__(self):\n        if self.start >= self.end:\n            raise ValueError(\"start must be before end\")",
+  "check": "import dataclasses\ns = Slot(9, 11)\nassert (s.start, s.end) == (9, 11)\nfor a, b in ((11, 9), (9, 9)):\n    try:\n        Slot(a, b)\n    except ValueError:\n        pass\n    else:\n        raise AssertionError(f\"Slot({a}, {b}) should raise ValueError (validate in __post_init__)\")\ntry:\n    s.start = 10\nexcept dataclasses.FrozenInstanceError:\n    pass\nelse:\n    raise AssertionError(\"Slot must be immutable: @dataclass(frozen=True)\")\nassert len({Slot(9, 11), Slot(9, 11), Slot(10, 12)}) == 2, \"frozen + eq makes it hashable\"",
+  "why": "frozen=True gives immutability and __hash__; __post_init__ runs after the generated __init__ for validation."
+ },
+ {
+  "id": "05_classes.ex11", "level": "advanced",
+  "prompt": "Define class `Version(text)` comparing numerically on its dotted parts ('1.10' > '1.9'), writing only __eq__, __lt__ and __hash__ by hand yet supporting <=, >, >=. Non-Version comparisons: == gives False, < raises TypeError.",
+  "answer": "from functools import total_ordering\n@total_ordering\nclass Version:\n    def __init__(self, text):\n        self.key = tuple(int(p) for p in text.split(\".\"))\n    def __eq__(self, other):\n        return self.key == other.key if isinstance(other, Version) else NotImplemented\n    def __lt__(self, other):\n        return self.key < other.key if isinstance(other, Version) else NotImplemented\n    def __hash__(self):\n        return hash(self.key)",
+  "check": "V = Version\nassert V(\"1.10.0\") > V(\"1.9.3\"), \"compare int tuples, not strings\"\nassert V(\"2.0\") >= V(\"1.99\"), \">= should come from @total_ordering\"\nassert V(\"1.0\") <= V(\"1.0\")\nassert [v.key for v in sorted([V(\"1.10\"), V(\"1.2\"), V(\"1.9.1\")])] == [(1, 2), (1, 9, 1), (1, 10)]\nassert len({V(\"1.2\"), V(\"1.2\")}) == 1, \"equal Versions must hash the same\"\nassert (V(\"1.0\") == \"1.0\") is False\ntry:\n    V(\"1.0\") < \"1.0\"\nexcept TypeError:\n    pass\nelse:\n    raise AssertionError(\"< against a str should raise TypeError (return NotImplemented)\")",
+  "why": "@functools.total_ordering fills in <=, >, >= from __eq__ + __lt__; keep __hash__ consistent with __eq__."
+ },
+ {
+  "id": "05_classes.ex12", "level": "advanced",
+  "prompt": "Define class `ModelRegistry(models)` over a list of {'name', 'size_gb'} dicts, supporting len(reg), `name in reg`, reg[name] (KeyError if unknown), and `for m in reg` yielding the dicts in insertion order.",
+  "given": "MODELS = [\n    {\"name\": \"phi3:mini\", \"size_gb\": 2.2},\n    {\"name\": \"llama3:8b\", \"size_gb\": 4.7},\n    {\"name\": \"gemma2:9b\", \"size_gb\": 5.4},\n]",
+  "answer": "class ModelRegistry:\n    def __init__(self, models):\n        self._models = {m[\"name\"]: m for m in models}\n    def __len__(self): return len(self._models)\n    def __contains__(self, name): return name in self._models\n    def __getitem__(self, name): return self._models[name]\n    def __iter__(self): return iter(self._models.values())",
+  "check": "reg = ModelRegistry(MODELS)\nassert len(reg) == 3, len(reg)\nassert \"phi3:mini\" in reg and \"nope\" not in reg\nassert reg[\"llama3:8b\"] == {\"name\": \"llama3:8b\", \"size_gb\": 4.7}, reg[\"llama3:8b\"]\ntry:\n    reg[\"nope\"]\nexcept KeyError:\n    pass\nelse:\n    raise AssertionError(\"unknown name should raise KeyError\")\ntry:\n    names = [m[\"name\"] for m in reg]\nexcept KeyError:\n    raise AssertionError(\"`for m in reg` called reg[0]: define __iter__\") from None\nassert names == [\"phi3:mini\", \"llama3:8b\", \"gemma2:9b\"], names\nassert not ModelRegistry([]), \"__len__ == 0 makes the registry falsy\"",
+  "why": "__len__, __contains__, __getitem__, __iter__; without __iter__, for-loops fall back to reg[0], reg[1]..."
+ },
+ {
+  "id": "05_classes.ex13", "level": "advanced",
+  "prompt": "Define context-manager class `ModelLease(name, log, swallow=())`: entering appends 'load <name>' and binds the lease to `as`; exiting ALWAYS appends 'unload <name>'. An exception from the body propagates unless it's an instance of a type in `swallow`.",
+  "answer": "class ModelLease:\n    def __init__(self, name, log, swallow=()):\n        self.name, self.log, self.swallow = name, log, swallow\n    def __enter__(self):\n        self.log.append(f\"load {self.name}\")\n        return self\n    def __exit__(self, exc_type, exc, tb):\n        self.log.append(f\"unload {self.name}\")\n        return exc_type is not None and issubclass(exc_type, self.swallow)",
+  "check": "log = []\nwith ModelLease(\"phi3\", log) as lease:\n    assert isinstance(lease, ModelLease), \"__enter__ must return self\"\n    log.append(\"ask\")\nassert log == [\"load phi3\", \"ask\", \"unload phi3\"], log\nlog = []\ntry:\n    with ModelLease(\"phi3\", log):\n        raise ValueError(\"bad prompt\")\nexcept ValueError:\n    pass\nelse:\n    raise AssertionError(\"ValueError was swallowed: __exit__ must return False unless it's in swallow\")\nassert log == [\"load phi3\", \"unload phi3\"], log\ntry:\n    with ModelLease(\"phi3\", [], swallow=(LookupError,)):\n        {}[\"missing\"]\nexcept KeyError:\n    raise AssertionError(\"KeyError is a LookupError; swallow=(LookupError,) should suppress it\")",
+  "why": "__enter__ returns what `as` binds; __exit__ always runs, and returning True suppresses the exception."
+ },
+ {
+  "id": "05_classes.ex14", "level": "advanced",
+  "prompt": "Write `get(self, city)` (a top-level def; the check attaches it to ProviderClient): key = city stripped + lowercased; return the cached value if present, else call self.provider.fetch(key), retrying ONLY TimeoutError up to self.retries extra times and re-raising the last one. Cache successes only.",
+  "given": "class ProviderClient:\n    def __init__(self, provider, retries=2):\n        self.provider, self.retries, self._cache = provider, retries, {}\n# provider.fetch(key) returns a float, or raises TimeoutError (transient) / KeyError (unknown city)",
+  "setup": "class FakeProvider:\n    def __init__(self, temps, timeouts=0):\n        self.temps, self.timeouts, self.calls = temps, timeouts, []\n    def fetch(self, city):\n        self.calls.append(city)\n        if self.timeouts > 0:\n            self.timeouts -= 1\n            raise TimeoutError(\"provider slow\")\n        return self.temps[city]",
+  "answer": "def get(self, city):\n    key = city.strip().lower()\n    if key not in self._cache:\n        for attempt in range(self.retries + 1):\n            try:\n                self._cache[key] = self.provider.fetch(key)\n                break\n            except TimeoutError:\n                if attempt == self.retries:\n                    raise\n    return self._cache[key]",
+  "check": "ProviderClient.get = get\ntemps = {\"durham\": 21.5, \"cary\": 22.0}\np = FakeProvider(temps); c = ProviderClient(p)\nassert c.get(\" Durham \") == 21.5 and p.calls == [\"durham\"], p.calls\nc.get(\"DURHAM\")\nassert len(p.calls) == 1, \"second get should be a cache hit\"\np = FakeProvider(temps, timeouts=2); c = ProviderClient(p, retries=2)\nassert c.get(\"cary\") == 22.0 and len(p.calls) == 3, f\"2 timeouts + 1 success, got {len(p.calls)} calls\"\np = FakeProvider(temps, timeouts=3); c = ProviderClient(p, retries=2)\ntry:\n    c.get(\"cary\")\nexcept TimeoutError:\n    pass\nelse:\n    raise AssertionError(\"after 1 try + 2 retries, re-raise the TimeoutError\")\nassert len(p.calls) == 3, f\"1 try + 2 retries, got {len(p.calls)} calls\"\nassert c.get(\"cary\") == 22.0, \"a failure must not be cached\"\np = FakeProvider(temps); c = ProviderClient(p, retries=5)\ntry:\n    c.get(\"boston\")\nexcept KeyError:\n    pass\nassert len(p.calls) == 1, f\"only TimeoutError is retried, got {len(p.calls)} calls\"",
+  "why": "One seam owns retry + cache: loop over attempts, catch only the transient error, bare `raise` on the last try."
+ }
+]

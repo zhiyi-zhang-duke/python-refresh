@@ -1,0 +1,117 @@
+[
+ {
+  "id": "03_dicts_sets.ex01", "level": "easy",
+  "prompt": "Set `price` to the price of `item` (keys are lowercase; the query has stray case/whitespace). Unknown items cost 0.0, never KeyError.",
+  "given": "prices = {'apple': 0.5, 'free sample': 0.0}\nitem = '  Apple\\n'",
+  "answer": "price = prices.get(item.strip().lower(), 0.0)",
+  "check": "assert price == 0.5, price\nrerun(item='kiwi')\nassert price == 0.0, price",
+  "why": "d.get(key, default) never raises; d[key] does."
+ },
+ {
+  "id": "03_dicts_sets.ex02", "level": "easy",
+  "prompt": "Count lines per level (the 3rd whitespace-separated field) into `counts` by hand, no Counter. Skip blank lines, including whitespace-only ones.",
+  "given": "lines = [\n    '2026-09-14 10:03:22 INFO [cli] started',\n    '2026-09-14 10:03:25 ERROR [provider] Model not loaded',\n    '',\n    '   ',\n    '2026-09-14 10:04:02 INFO [provider] retrying',\n    '2026-09-14 10:04:09 ERROR [db] connection refused',\n]\ncounts = {}",
+  "answer": "for line in lines:\n    if line.strip():\n        level = line.split()[2]\n        counts[level] = counts.get(level, 0) + 1",
+  "check": "assert type(counts) is dict, \"by hand: keep counts a plain dict\"\nassert counts == {'INFO': 2, 'ERROR': 2}, counts",
+  "why": "counts[k] = counts.get(k, 0) + 1; test line.strip(), not line, to skip whitespace-only lines."
+ },
+ {
+  "id": "03_dicts_sets.ex03", "level": "easy",
+  "prompt": "Set `merged` to a NEW dict: `defaults` updated by `overrides`, except overrides whose value is None are ignored. Don't modify either input.",
+  "given": "defaults = {'unit': 'F', 'days': 3, 'verbose': True}\noverrides = {'days': 5, 'unit': None, 'verbose': False}",
+  "answer": "merged = defaults | {k: v for k, v in overrides.items() if v is not None}",
+  "check": "assert merged == {'unit': 'F', 'days': 5, 'verbose': False}, f\"{merged} (False is a real override; only None means unset)\"\nassert defaults == {'unit': 'F', 'days': 3, 'verbose': True}, \"defaults was modified\"\nassert overrides == {'days': 5, 'unit': None, 'verbose': False}, \"overrides was modified\"",
+  "why": "a | b builds a new dict, right side wins; filter with `is not None`, not truthiness."
+ },
+ {
+  "id": "03_dicts_sets.ex04", "level": "easy",
+  "prompt": "Write `switch_profile(name)`: make `name` the module-level ACTIVE_PROFILE, add 1 to that profile's 'uses' in PROFILES, return the profile dict. An unknown name raises KeyError and leaves ACTIVE_PROFILE unchanged.",
+  "given": "PROFILES = {'default': {'unit': 'F', 'uses': 0}, 'metric': {'unit': 'C', 'uses': 0}}\nACTIVE_PROFILE = 'default'",
+  "answer": "def switch_profile(name):\n    global ACTIVE_PROFILE\n    profile = PROFILES[name]\n    ACTIVE_PROFILE = name\n    profile[\"uses\"] += 1\n    return profile",
+  "check": "assert switch_profile('metric') == {'unit': 'C', 'uses': 1}\nassert ACTIVE_PROFILE == 'metric', f\"ACTIVE_PROFILE is still {ACTIVE_PROFILE!r}: missing `global`?\"\ntry:\n    switch_profile('imperial')\nexcept KeyError:\n    pass\nelse:\n    raise AssertionError(\"unknown profile must raise KeyError\")\nassert ACTIVE_PROFILE == 'metric', f\"unknown profile changed ACTIVE_PROFILE to {ACTIVE_PROFILE!r}: look it up first\"",
+  "why": "ASSIGNING a module-level name in a function needs `global`; mutating PROFILES[...] doesn't."
+ },
+ {
+  "id": "03_dicts_sets.ex05", "level": "medium",
+  "prompt": "Set `top` to the `n` (source, count) pairs with the most ERROR lines, highest first, ties in first-seen order. The source is the '[...]' field without brackets.",
+  "given": "lines = [\n    '2026-09-14 10:03:25 ERROR [provider] not loaded',\n    '2026-09-14 10:03:30 ERROR [cli] bad command',\n    '2026-09-14 10:04:01 ERROR [provider] timeout',\n    '2026-09-14 10:04:02 INFO [provider] retrying',\n    '2026-09-14 10:04:09 ERROR [db] refused',\n    '2026-09-14 10:04:10 ERROR [cli] bad command',\n    '2026-09-14 10:04:15 ERROR [provider] timeout',\n]\nn = 2",
+  "answer": "from collections import Counter\ntop = Counter(l.split()[3].strip(\"[]\") for l in lines if l.split()[2] == \"ERROR\").most_common(n)",
+  "check": "assert top == [('provider', 3), ('cli', 2)], top\nrerun(lines=['2026-01-01 00:00:00 ERROR [zeta] a', '2026-01-01 00:00:01 ERROR [alpha] b'], n=2)\nassert top == [('zeta', 1), ('alpha', 1)], f\"{top} (ties keep first-seen order)\"",
+  "why": "Counter(iterable).most_common(n) returns (key, count) pairs, highest first, ties in insertion order."
+ },
+ {
+  "id": "03_dicts_sets.ex06", "level": "medium",
+  "prompt": "Set `groups` to a PLAIN dict mapping provider -> model names in input order. A record with no 'provider' goes under 'unknown'.",
+  "given": "models = [\n    {'name': 'phi3:mini', 'provider': 'ollama'},\n    {'name': 'gpt-4o', 'provider': 'openai'},\n    {'name': 'llama3:70b', 'provider': 'ollama'},\n    {'name': 'mystery-7b'},\n]",
+  "answer": "from collections import defaultdict\ngroups = defaultdict(list)\nfor m in models:\n    groups[m.get(\"provider\", \"unknown\")].append(m[\"name\"])\ngroups = dict(groups)",
+  "check": "assert groups == {'ollama': ['phi3:mini', 'llama3:70b'], 'openai': ['gpt-4o'], 'unknown': ['mystery-7b']}, groups\nassert type(groups) is dict, f\"got {type(groups).__name__}: wrap it in dict() so missing-key reads don't insert\"",
+  "why": "defaultdict(list) (or setdefault(k, []).append) groups; dict() it before returning."
+ },
+ {
+  "id": "03_dicts_sets.ex07", "level": "medium",
+  "prompt": "Set `inv` to `aliases` inverted: model -> SORTED list of all its aliases. Several aliases share a model; none may be lost.",
+  "given": "aliases = {'fast': 'phi3', 'small': 'phi3', 'big': 'llama3', 'default': 'phi3'}",
+  "answer": "by_model = {}\nfor alias, model in aliases.items():\n    by_model.setdefault(model, []).append(alias)\ninv = {m: sorted(a) for m, a in by_model.items()}",
+  "check": "assert inv == {'phi3': ['default', 'fast', 'small'], 'llama3': ['big']}, inv",
+  "why": "{v: k for k, v in d.items()} silently keeps only the last key per value; group with setdefault."
+ },
+ {
+  "id": "03_dicts_sets.ex08", "level": "medium",
+  "prompt": "Set five SORTED lists from the two hosts (inputs may contain duplicates): `both`, `only_local`, `only_remote`, `out_of_sync` (on exactly one host), `either` (on any host).",
+  "given": "local = ['phi3', 'llama3', 'phi3', 'qwen']\nremote = ['llama3', 'mistral', 'gemma']",
+  "answer": "a, b = set(local), set(remote)\nboth, only_local, only_remote = sorted(a & b), sorted(a - b), sorted(b - a)\nout_of_sync, either = sorted(a ^ b), sorted(a | b)",
+  "check": "assert both == ['llama3'], both\nassert only_local == ['phi3', 'qwen'], only_local\nassert only_remote == ['gemma', 'mistral'], only_remote\nassert out_of_sync == ['gemma', 'mistral', 'phi3', 'qwen'], out_of_sync\nassert either == ['gemma', 'llama3', 'mistral', 'phi3', 'qwen'], either",
+  "why": "& intersection, - difference, ^ symmetric difference, | union; sorted() turns a set into a list."
+ },
+ {
+  "id": "03_dicts_sets.ex09", "level": "medium",
+  "prompt": "Set `ranked` to the (key, value) pairs of `scores`, highest value first, ties broken by key A-Z.",
+  "given": "scores = {'cy': 5, 'al': 9, 'bo': 5}",
+  "answer": "ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))",
+  "check": "assert ranked == [('al', 9), ('bo', 5), ('cy', 5)], f\"{ranked} (reverse=True flips the key tiebreak too)\"",
+  "why": "Negate the number to flip just that part of a tuple key."
+ },
+ {
+  "id": "03_dicts_sets.ex10", "level": "medium",
+  "prompt": "Walk the dotted `path` through `cfg` into `val`: dict segments are keys, all-digit segments index lists. If any step is missing, out of range, or hits a non-dict/list, `val` is `default`. Existing None/0/False values are kept.",
+  "given": "cfg = {\n    'providers': {\n        'ollama': {'host': 'localhost', 'port': 11434, 'models': [{'name': 'phi3'}, {'name': 'llama3'}]},\n        'openai': {'key': None},\n    },\n    'debug': False,\n}\npath, default = 'providers.ollama.models.1.name', None",
+  "answer": "val = cfg\nfor seg in path.split(\".\"):\n    if isinstance(val, dict) and seg in val:\n        val = val[seg]\n    elif isinstance(val, list) and seg.isdigit() and int(seg) < len(val):\n        val = val[int(seg)]\n    else:\n        val = default\n        break",
+  "check": "assert val == 'llama3', val\nfor p, dflt, want in [('providers.ollama.port', None, 11434), ('providers.openai.port', 80, 80),\n                      ('debug', 'x', False), ('providers.openai.key', 'x', None),\n                      ('providers.ollama.models.9.name', 'x', 'x'), ('providers.ollama.models.first', 'x', 'x'),\n                      ('providers.ollama.host.length', 'x', 'x'), ('providers.ollama.port.0', 'x', 'x')]:\n    rerun(path=p, default=dflt)\n    assert val == want and type(val) is type(want), (p, val)",
+  "why": "Check `seg in d` (not truthiness) so existing falsy values survive; isinstance guards each step."
+ },
+ {
+  "id": "03_dicts_sets.ex11", "level": "advanced",
+  "prompt": "Dispatch `name`/`args` through `commands` (name -> (handler, usage)), appending to `out`: unknown name -> 'unknown command: <name>'; else the handler's result, but the provider module's UnknownCity -> 'unknown city: <e>' and ValueError -> 'usage: <usage>'. Let anything else propagate.",
+  "given": "# `provider` (a module with get_temp and UnknownCity) and cmd_weather(args) already exist\ncommands = {'weather': (cmd_weather, 'weather <city>'), 'boom': (boom, 'boom')}\nname, args = 'weather', ['Atlantis']\nout = []",
+  "setup": "import types\nclass _UnknownCity(Exception):\n    pass\ndef _get_temp(city):\n    temps = {'durham': 72, 'new york': 65}\n    if city.strip().lower() not in temps:\n        raise _UnknownCity(city)\n    return temps[city.strip().lower()]\nprovider = types.SimpleNamespace(UnknownCity=_UnknownCity, get_temp=_get_temp)\ndef cmd_weather(args):\n    if not args:\n        raise ValueError('city required')\n    city = ' '.join(args)\n    return f'{city}: {provider.get_temp(city)}F'\ndef boom(args):\n    raise ZeroDivisionError('handler bug')",
+  "answer": "if name not in commands:\n    out.append(f\"unknown command: {name}\")\nelse:\n    handler, usage = commands[name]\n    try:\n        out.append(handler(args))\n    except provider.UnknownCity as e:\n        out.append(f\"unknown city: {e}\")\n    except ValueError:\n        out.append(f\"usage: {usage}\")",
+  "check": "assert out == ['unknown city: Atlantis'], out\nrerun(args=['New', 'York'], out=[])\nassert out == ['New York: 65F'], out\nrerun(args=[], out=[])\nassert out == ['usage: weather <city>'], out\nrerun(name='lod', out=[])\nassert out == ['unknown command: lod'], out\ntry:\n    rerun(name='boom', args=[], out=[])\nexcept ZeroDivisionError:\n    pass\nelse:\n    raise AssertionError(f\"a handler bug was swallowed as {out}: don't catch Exception\")",
+  "why": "The exception lives in the other module: except provider.UnknownCity as e; unpack handler, usage = entry."
+ },
+ {
+  "id": "03_dicts_sets.ex12", "level": "advanced",
+  "prompt": "Write `deep_merge(base, override)` returning a NEW dict: where both sides hold a dict, merge recursively; otherwise override wins. Inputs must not change, and the result must share no nested dict/list with either input.",
+  "given": "base = {'db': {'host': 'a', 'port': 1, 'opts': {'ssl': True}}, 'cache': {'size': 1}, 'tags': [1]}\noverride = {'db': {'port': 2, 'opts': {'timeout': 5}}, 'tags': [2], 'extra': {'k': [1]}}",
+  "answer": "import copy\ndef deep_merge(base, override):\n    out = copy.deepcopy(base)\n    for k, v in override.items():\n        if isinstance(out.get(k), dict) and isinstance(v, dict):\n            out[k] = deep_merge(out[k], v)\n        else:\n            out[k] = copy.deepcopy(v)\n    return out",
+  "check": "res = deep_merge(base, override)\nassert res == {'db': {'host': 'a', 'port': 2, 'opts': {'ssl': True, 'timeout': 5}}, 'cache': {'size': 1}, 'tags': [2], 'extra': {'k': [1]}}, res\nassert base['db'] == {'host': 'a', 'port': 1, 'opts': {'ssl': True}}, (\"base was modified\", base)\nres['cache']['size'] = 99\nres['extra']['k'].append(99)\nassert base['cache'] == {'size': 1}, \"result shares a nested dict with base (shallow copy?)\"\nassert override['extra'] == {'k': [1]}, \"result shares a nested list with override\"\nassert deep_merge({'a': {'b': 1}}, {'a': 5}) == {'a': 5}\nassert deep_merge({'a': 5}, {'a': {'b': 1}}) == {'a': {'b': 1}}",
+  "why": "copy.deepcopy both sides; dict(base) / {**base} is shallow and shares nested objects."
+ },
+ {
+  "id": "03_dicts_sets.ex13", "level": "advanced",
+  "prompt": "Subclass `LRUBase` as `LRUCache` and write `put(key, value)`: insert or update, make the key most recently used, and evict the least recently used key when over `self.capacity`. `self._data` is an OrderedDict, front = least recently used.",
+  "given": "# LRUBase already has __init__(capacity), get(key, default) (refreshes on a hit), __len__, keys()",
+  "setup": "from collections import OrderedDict\nclass LRUBase:\n    def __init__(self, capacity):\n        self.capacity = capacity\n        self._data = OrderedDict()\n    def get(self, key, default=None):\n        if key not in self._data:\n            return default\n        self._data.move_to_end(key)\n        return self._data[key]\n    def __len__(self):\n        return len(self._data)\n    def keys(self):\n        return list(self._data)",
+  "answer": "class LRUCache(LRUBase):\n    def put(self, key, value):\n        self._data[key] = value\n        self._data.move_to_end(key)\n        if len(self._data) > self.capacity:\n            self._data.popitem(last=False)",
+  "check": "c = LRUCache(2)\nc.put('a', 1)\nc.put('b', 2)\nc.get('a')\nc.put('c', 3)\nassert c.keys() == ['a', 'c'], f\"{c.keys()}, want ['a', 'c']: 'b' was least recently used\"\nc.put('a', 10)\nk = c.keys()\nassert k == ['c', 'a'], f\"{k}, want ['c', 'a']: updating 'a' must make it most recent\"\nassert c.get('a') == 10, c.get('a')\nc.put('d', 4)\nassert c.keys() == ['a', 'd'] and len(c) == 2, c.keys()",
+  "why": "move_to_end(key) marks most recent; popitem(last=False) pops the oldest (plain popitem() pops the newest)."
+ },
+ {
+  "id": "03_dicts_sets.ex14", "level": "advanced",
+  "prompt": "BFS from `start` over `graph` (one-way, node -> list of next nodes; nodes with no outbound flights are absent) so `came_from` maps every reachable node to the node it was first reached from (start -> None). Fewest legs wins.",
+  "given": "from collections import deque\ngraph = {'RDU': ['ATL', 'CLT'], 'ATL': ['LAX', 'RDU'], 'CLT': ['ORD'], 'ORD': ['SEA'], 'LAX': ['HNL'], 'SEA': ['ANC']}\nstart = 'RDU'",
+  "setup": "def _walk(came_from, goal):\n    if goal not in came_from:\n        return None\n    path = [goal]\n    while came_from[path[-1]] is not None:\n        path.append(came_from[path[-1]])\n    return path[::-1]",
+  "answer": "came_from, queue = {start: None}, deque([start])\nwhile queue:\n    node = queue.popleft()\n    for nxt in graph.get(node, ()):\n        if nxt not in came_from:\n            came_from[nxt] = node\n            queue.append(nxt)",
+  "check": "assert _walk(came_from, 'ANC') == ['RDU', 'CLT', 'ORD', 'SEA', 'ANC'], _walk(came_from, 'ANC')\nassert _walk(came_from, 'HNL') == ['RDU', 'ATL', 'LAX', 'HNL'], _walk(came_from, 'HNL')\nrerun(start='SEA')\nassert 'ORD' not in came_from, \"flights are one-way\"\nrerun(graph={'A': ['C', 'B'], 'B': ['X'], 'X': ['G'], 'C': ['G']}, start='A')\nassert _walk(came_from, 'G') == ['A', 'C', 'G'], f\"{_walk(came_from, 'G')}: fewest legs needs BFS (popleft), not a stack\"",
+  "why": "deque + popleft() is BFS; came_from doubles as the visited set; graph.get(node, ()) for dead ends."
+ }
+]

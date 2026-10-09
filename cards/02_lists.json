@@ -1,0 +1,114 @@
+[
+ {
+  "id": "02_lists.ex01", "level": "easy",
+  "prompt": "Set `out` to the last `n` items of `items`. `n` can be 0, or bigger than the list.",
+  "given": "items, n = [1, 2, 3, 4, 5], 2",
+  "answer": "out = items[-n:] if n > 0 else []",
+  "check": "assert out == [4, 5], out\nrerun(n=0)\nassert out == [], f\"n=0 gave {out} (items[-0:] is the whole list)\"\nrerun(n=10)\nassert out == [1, 2, 3, 4, 5], out",
+  "why": "-0 == 0, so items[-0:] is the WHOLE list; guard n == 0."
+ },
+ {
+  "id": "02_lists.ex02", "level": "easy",
+  "prompt": "Set `names` to the names of the loaded models, in order. A record with no 'loaded' key is not loaded.",
+  "given": "models = [\n    {'name': 'phi3:mini', 'loaded': True},\n    {'name': 'llama3:70b', 'loaded': False},\n    {'name': 'gpt-4o', 'loaded': True},\n    {'name': 'mistral:7b'},\n]",
+  "answer": "names = [m[\"name\"] for m in models if m.get(\"loaded\")]",
+  "check": "assert names == ['phi3:mini', 'gpt-4o'], names",
+  "why": "Comprehension with an if; .get() returns None (falsy) for a missing key instead of KeyError."
+ },
+ {
+  "id": "02_lists.ex03", "level": "easy",
+  "prompt": "Set `menu` to the options numbered from 1, like '1) list'.",
+  "given": "options = ['list', 'load', 'quit']",
+  "answer": "menu = [f\"{i}) {opt}\" for i, opt in enumerate(options, start=1)]",
+  "check": "assert menu == ['1) list', '2) load', '3) quit'], menu",
+  "why": "enumerate(xs, start=1) instead of i + 1 or range(len(xs))."
+ },
+ {
+  "id": "02_lists.ex04", "level": "easy",
+  "prompt": "Set `out` to a NEW list: `tags` plus `tag` at the end unless it's already there. Never modify `tags`, and `out` must not be the same object as `tags` even when nothing is added.",
+  "given": "tags, tag = ['fast'], 'local'",
+  "answer": "out = list(tags)\nif tag not in out:\n    out.append(tag)",
+  "check": "assert out == ['fast', 'local'], out\nassert tags == ['fast'], f\"tags was modified: {tags} (out = tags is an alias, not a copy)\"\nrerun(tag='fast')\nassert out == ['fast'], out\nassert out is not tags, \"out is tags: copy even when nothing is added\"",
+  "why": "out = tags copies nothing; list(tags) / tags[:] / tags.copy() make a new list."
+ },
+ {
+  "id": "02_lists.ex05", "level": "medium",
+  "prompt": "Set `out` to `bookings` sorted by date newest first, then nights most first, then guest A-Z case-insensitive. Don't reorder `bookings` itself.",
+  "given": "bookings = [\n    {'guest': 'bo', 'date': '2026-10-03', 'nights': 2},\n    {'guest': 'Ana', 'date': '2026-10-01', 'nights': 5},\n    {'guest': 'Cy', 'date': '2026-10-03', 'nights': 2},\n    {'guest': 'al', 'date': '2026-10-03', 'nights': 4},\n    {'guest': 'Dee', 'date': '2026-10-01', 'nights': 1},\n]",
+  "answer": "out = sorted(bookings, key=lambda b: b[\"guest\"].lower())\nout.sort(key=lambda b: (b[\"date\"], b[\"nights\"]), reverse=True)",
+  "check": "assert [b['guest'] for b in out] == ['al', 'bo', 'Cy', 'Ana', 'Dee'], [b['guest'] for b in out]\nassert [b['guest'] for b in bookings] == ['bo', 'Ana', 'Cy', 'al', 'Dee'], \"bookings was reordered (list.sort mutates)\"",
+  "why": "Can't negate a string: sort is stable, so sort by the tiebreak first, then by the primary keys with reverse=True."
+ },
+ {
+  "id": "02_lists.ex06", "level": "medium",
+  "prompt": "Set `cols` to the columns of `rows`, each as a list. Ragged rows must raise ValueError, not silently truncate.",
+  "given": "rows = [['phi3', 2.2], ['llama3', 39.0]]",
+  "answer": "cols = [list(c) for c in zip(*rows, strict=True)]",
+  "check": "assert cols == [['phi3', 'llama3'], [2.2, 39.0]], cols\nrerun(rows=[])\nassert cols == [], cols\ntry:\n    rerun(rows=[[1, 2], [3]])\nexcept ValueError:\n    pass\nelse:\n    raise AssertionError(f\"ragged rows gave {cols} instead of ValueError\")",
+  "why": "zip(*rows) transposes; strict=True (3.10+) raises on unequal lengths; zip yields tuples."
+ },
+ {
+  "id": "02_lists.ex07", "level": "medium",
+  "prompt": "Dedupe keeping the first occurrence and the original order: `uniq` from `nums` (one line), and `towns` from `cities` comparing case-insensitively (keep the first spelling).",
+  "given": "nums = [3, 1, 3, 2, 1]\ncities = ['Durham', 'durham', 'Cary', 'DURHAM']",
+  "answer": "uniq = list(dict.fromkeys(nums))\nseen, towns = set(), []\nfor c in cities:\n    if c.lower() not in seen:\n        seen.add(c.lower())\n        towns.append(c)",
+  "check": "assert uniq == [3, 1, 2], f\"{uniq} (set() loses order)\"\nassert towns == ['Durham', 'Cary'], towns",
+  "why": "dict.fromkeys keeps insertion order (set() doesn't); with a key function, track a seen set of keys."
+ },
+ {
+  "id": "02_lists.ex08", "level": "medium",
+  "prompt": "Set `batches` to `items` split into consecutive lists of `size`; the last may be shorter.",
+  "given": "items, size = [1, 2, 3, 4, 5], 2",
+  "answer": "batches = [items[i:i + size] for i in range(0, len(items), size)]",
+  "check": "assert batches == [[1, 2], [3, 4], [5]], batches\nrerun(items=[1, 2, 3, 4], size=2)\nassert batches == [[1, 2], [3, 4]], batches\nrerun(items=[1, 2], size=5)\nassert batches == [[1, 2]], batches",
+  "why": "range(0, len, size) steps the start; slices past the end don't raise."
+ },
+ {
+  "id": "02_lists.ex09", "level": "medium",
+  "prompt": "Set `out` to a new list: `items` rotated RIGHT by `k`. Negative k rotates left, k may exceed the length, and `items` may be empty.",
+  "given": "items, k = [1, 2, 3, 4, 5], 2",
+  "answer": "k = k % len(items) if items else 0\nout = items[-k:] + items[:-k]",
+  "check": "assert out == [4, 5, 1, 2, 3], out\nrerun(k=-1)\nassert out == [2, 3, 4, 5, 1], (\"k=-1\", out)\nrerun(items=[1, 2, 3], k=7)\nassert out == [3, 1, 2], (\"k=7\", out)\nrerun(items=[1, 2, 3], k=3)\nassert out == [1, 2, 3] and out is not items, (\"k=3\", out)\nrerun(items=[], k=3)\nassert out == [], out",
+  "why": "k %= len folds negative and oversized k; Python's % is never negative for a positive divisor."
+ },
+ {
+  "id": "02_lists.ex10", "level": "medium",
+  "prompt": "Set `avgs` to the average of every window of `k` consecutive values, each rounded to 2 places, in O(n) with a running sum. `values` has at least k items.",
+  "given": "values, k = [100, 200, 300, 400], 2",
+  "answer": "window = sum(values[:k])\navgs = [round(window / k, 2)]\nfor i in range(k, len(values)):\n    window += values[i] - values[i - k]\n    avgs.append(round(window / k, 2))",
+  "check": "assert avgs == [150.0, 250.0, 350.0], avgs\nrerun(values=[1, 2, 2], k=3)\nassert avgs == [1.67], avgs\nrerun(values=[4, 8, 1, 3, 9], k=3)\nassert avgs == [4.33, 4.0, 4.33], avgs",
+  "why": "Sum the first window once, then add values[i] and subtract values[i - k]."
+ },
+ {
+  "id": "02_lists.ex11", "level": "advanced",
+  "prompt": "Flatten `nested` (lists and tuples to any depth; strings stay whole; falsy values are kept) into `out` WITHOUT recursion: a stack of iterators and next() with a sentinel.",
+  "given": "nested = [1, [2, (3, [4])], 'ab', [], [None, 0]]\nout = []",
+  "answer": "stack, done = [iter(nested)], object()\nwhile stack:\n    item = next(stack[-1], done)\n    if item is done:\n        stack.pop()\n    elif isinstance(item, (list, tuple)):\n        stack.append(iter(item))\n    else:\n        out.append(item)",
+  "check": "assert out == [1, 2, 3, 4, 'ab', None, 0], f\"{out} (None as the sentinel drops real Nones)\"\ndeep = [7]\nfor _ in range(5000):\n    deep = [deep, 1]\nrerun(nested=deep, out=[])\nassert (len(out), out[0]) == (5001, 7), (len(out), out[:3])",
+  "why": "A private object() sentinel can't collide with real values the way None can; the explicit stack dodges the recursion limit."
+ },
+ {
+  "id": "02_lists.ex12", "level": "advanced",
+  "prompt": "Append to `merged` the bookings (start, end) merged where they overlap OR touch, sorted by start. Don't modify `bookings`.",
+  "given": "bookings = [(13, 15), (9, 10), (10, 11), (14, 17)]\nmerged = []",
+  "answer": "for start, end in sorted(bookings):\n    if merged and start <= merged[-1][1]:\n        merged[-1] = (merged[-1][0], max(merged[-1][1], end))\n    else:\n        merged.append((start, end))",
+  "check": "assert merged == [(9, 11), (13, 17)], merged\nassert bookings == [(13, 15), (9, 10), (10, 11), (14, 17)], \"bookings was modified\"\nrerun(bookings=[(1, 10), (2, 3), (4, 5)], merged=[])\nassert merged == [(1, 10)], f\"{merged} (a contained interval needs max())\"\nrerun(bookings=[(1, 2), (3, 4)], merged=[])\nassert merged == [(1, 2), (3, 4)], merged",
+  "why": "Sort, then compare each start with merged[-1]'s end; max() handles a contained interval; <= merges touching ones."
+ },
+ {
+  "id": "02_lists.ex13", "level": "advanced",
+  "prompt": "Append to `out` the max of every window of `k` consecutive `values` in O(n), using `dq` as a deque of INDICES whose values decrease front to back.",
+  "given": "from collections import deque\nvalues, k = [1, 3, -1, -3, 5, 3, 6, 7], 3\ndq, out = deque(), []",
+  "answer": "for i, v in enumerate(values):\n    if dq and dq[0] <= i - k:\n        dq.popleft()\n    while dq and values[dq[-1]] <= v:\n        dq.pop()\n    dq.append(i)\n    if i >= k - 1:\n        out.append(values[dq[0]])",
+  "check": "assert out == [3, 3, 5, 5, 6, 7], out\nrerun(values=[9, 8, 7, 6], k=2, dq=deque(), out=[])\nassert out == [9, 8, 7], out\nrerun(values=[4, 4, 4], k=2, dq=deque(), out=[])\nassert out == [4, 4], out",
+  "why": "popleft() indices that slid out, pop() smaller values from the back; dq[0] is the current max."
+ },
+ {
+  "id": "02_lists.ex14", "level": "advanced",
+  "prompt": "Apply each line of `lines` to `text`. 'TYPE <x>' appends everything after the FIRST space (inner spaces kept) and clears `redo`; UNDO/REDO move text snapshots between the `undo`/`redo` stacks (no-op when empty).",
+  "given": "lines = ['TYPE hello', 'TYPE  world', 'UNDO', 'REDO']\ntext, undo, redo = '', [], []",
+  "answer": "for line in lines:\n    cmd, _, arg = line.partition(\" \")\n    if cmd == \"TYPE\":\n        undo.append(text); redo.clear(); text += arg\n    elif cmd == \"UNDO\" and undo:\n        redo.append(text); text = undo.pop()\n    elif cmd == \"REDO\" and redo:\n        undo.append(text); text = redo.pop()",
+  "check": "assert text == 'hello world', f\"{text!r} (split(maxsplit=1) eats the extra space; partition keeps it)\"\nrerun(lines=['TYPE ab', 'UNDO', 'TYPE x', 'REDO'], text='', undo=[], redo=[])\nassert text == 'x', f\"{text!r}: a new TYPE must clear the redo stack\"\nrerun(lines=['TYPE a', 'UNDO', 'UNDO', 'REDO', 'REDO'], text='', undo=[], redo=[])\nassert text == 'a', repr(text)",
+  "why": "str.partition(' ') splits once and keeps the rest verbatim; undo/redo are two lists used as stacks of snapshots."
+ }
+]

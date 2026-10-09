@@ -73,6 +73,39 @@ Requires Python 3.10+. Standard library only, nothing to install.
    its README).
 5. **07, 10, 11, 13** as time allows. 13 matters most before a TDD pairing round.
 
+## Recall drill (the fast way)
+
+Solving whole exercises is thorough but slow. For volume, each exercise also has a
+**recall card** in `cards/<topic>.json`: the task plus given inputs, where you type only
+the 1–5 key lines. The card's own check grades them for real, at about 30–60 seconds a card.
+
+Ask Claude to "quiz me on python" (or "drill me on dicts"). It shows one card at a
+time, runs your lines with `drill.py check`, and logs Knew / Shaky / Missed to
+Funemployed HQ. Missed cards come back the same day, Shaky ones the next day, and
+Knew ones at growing intervals, so each session starts with what you missed.
+
+```bash
+python drill.py show 01_strings.ex04      # see a card
+python drill.py check 01_strings.ex04     # paste your lines, then Ctrl-Z/Ctrl-D
+python drill.py answer 01_strings.ex04    # reference answer and the idiom it tests
+python drill.py verify                    # every card: answer passes, empty fails
+```
+
+## Tracking progress
+
+Progress shows on the **Python** tab of Funemployed HQ. After practicing, tell Claude
+something like "I did 40 minutes of python-refresh, sync it". Claude runs
+
+```bash
+python run_all.py --json
+```
+
+and passes the result to the `funemployed-hq` MCP server (`sync_python_progress`). Status
+always comes from these tests, not from memory. Moving to passing counts as a solve, so
+resetting a topic to stubs (`git checkout -- 01_strings/exercises.py`) and re-solving it
+counts again. If exercises are ever added, `python run_all.py --catalog` feeds
+`sync_python_catalog` to create their rows.
+
 ## Tips
 
 - Delete the `raise NotImplementedError` line when you start an exercise.

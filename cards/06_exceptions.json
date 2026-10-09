@@ -1,0 +1,115 @@
+[
+ {
+  "id": "06_exceptions.ex01", "level": "easy",
+  "prompt": "Set `n` to `int(text)`, or None if the conversion fails. `text` may also be None.",
+  "given": "text = \"4.2\"",
+  "answer": "try:\n    n = int(text)\nexcept (ValueError, TypeError):\n    n = None",
+  "check": "assert n is None, n\nrerun(text=\" -7\\n\")\nassert n == -7, n\ntry:\n    rerun(text=None)\nexcept TypeError:\n    raise AssertionError(\"int(None) raises TypeError, not ValueError: catch both\") from None\nassert n is None, n\nrerun(text=\"abc\")\nassert n is None, n",
+  "why": "A tuple catches any of several types: except (ValueError, TypeError). int(None) is a TypeError."
+ },
+ {
+  "id": "06_exceptions.ex02", "level": "easy",
+  "prompt": "Set `cmd` to `read('> ')` stripped, or None if the user hits Ctrl-D (EOF) or Ctrl-C.",
+  "given": "def read(prompt):\n    prompts.append(prompt)\n    return \"  list \\n\"",
+  "setup": "prompts = []\ndef ctrl_d(prompt):\n    raise EOFError\ndef ctrl_c(prompt):\n    raise KeyboardInterrupt",
+  "answer": "try:\n    cmd = read(\"> \").strip()\nexcept (EOFError, KeyboardInterrupt):\n    cmd = None",
+  "check": "assert cmd == \"list\", cmd\nassert prompts == [\"> \"], f\"call read with '> ', got {prompts}\"\nrerun(read=ctrl_d)\nassert cmd is None, cmd\ntry:\n    rerun(read=ctrl_c)\nexcept KeyboardInterrupt:\n    raise AssertionError(\"KeyboardInterrupt escaped; it is NOT an Exception subclass, catch it explicitly\") from None\nassert cmd is None, cmd",
+  "why": "except (EOFError, KeyboardInterrupt): Ctrl-C is a BaseException, so `except Exception` misses it."
+ },
+ {
+  "id": "06_exceptions.ex03", "level": "easy",
+  "prompt": "Set `t` to `fetch(city)`, or None when it raises the provider module's UnknownCity (the module was imported as `provider`). Every other provider error, like provider.Timeout, must propagate.",
+  "given": "# import provider   (done for you)\nfetch = provider.get_temp\ncity = \"Atlantis\"",
+  "setup": "import types\ndef _make_provider():\n    provider = types.ModuleType(\"provider\")\n    class ProviderError(Exception): pass\n    class UnknownCity(ProviderError): pass\n    class Timeout(ProviderError): pass\n    temps = {\"durham\": 21.5, \"raleigh\": 23.0, \"cary\": 22.1, \"new york\": 15.8}\n    def get_temp(city):\n        key = city.strip().lower()\n        if key not in temps:\n            raise UnknownCity(f\"no data for {city!r}\")\n        return temps[key]\n    class FlakyProvider:\n        def __init__(self, fail_times=0):\n            self.fail_times, self.calls = fail_times, 0\n        def get_temp(self, city):\n            self.calls += 1\n            if self.calls <= self.fail_times:\n                raise Timeout(f\"timed out on call {self.calls}\")\n            return get_temp(city)\n    for obj in (ProviderError, UnknownCity, Timeout, get_temp, FlakyProvider):\n        setattr(provider, obj.__name__, obj)\n    return provider\nprovider = _make_provider()\ndel _make_provider",
+  "answer": "try:\n    t = fetch(city)\nexcept provider.UnknownCity:\n    t = None",
+  "check": "assert t is None, t\nrerun(city=\"  new york \")\nassert t == 15.8, t\ntry:\n    rerun(fetch=provider.FlakyProvider(fail_times=1).get_temp, city=\"durham\")\nexcept provider.Timeout:\n    pass\nelse:\n    raise AssertionError(f\"Timeout was swallowed (t={t!r}): catch only provider.UnknownCity\")",
+  "why": "With `import provider` the class lives on the module: except provider.UnknownCity; a bare UnknownCity is a NameError."
+ },
+ {
+  "id": "06_exceptions.ex04", "level": "easy",
+  "prompt": "Set `msg` to 'error: <ExceptionTypeName>: <message>' for exception `e`, or just 'error: <ExceptionTypeName>' when its message is empty.",
+  "given": "e = KeyError(\"phi3\")",
+  "answer": "msg = f\"error: {type(e).__name__}: {e}\" if str(e) else f\"error: {type(e).__name__}\"",
+  "check": "assert msg == \"error: KeyError: 'phi3'\", msg\nrerun(e=ZeroDivisionError(\"division by zero\"))\nassert msg == \"error: ZeroDivisionError: division by zero\", msg\nrerun(e=ValueError())\nassert msg == \"error: ValueError\", msg",
+  "why": "type(e).__name__ gives the bare class name; str(e) is the message ('' when raised with no args)."
+ },
+ {
+  "id": "06_exceptions.ex05", "level": "medium",
+  "prompt": "Set `port` to `int(config['services'][service]['port'])`, falling back to `default` when any level is missing, is None, or the port isn't an int string. EAFP: one try, no `in` checks.",
+  "given": "config = {\"services\": None}\nservice, default = \"ollama\", 8080",
+  "answer": "try:\n    port = int(config[\"services\"][service][\"port\"])\nexcept (KeyError, TypeError, ValueError):\n    port = default",
+  "check": "assert port == 8080, port\nrerun(config={\"services\": {\"ollama\": {\"port\": \"11434\"}}})\nassert port == 11434, port\nfor cfg in ({}, {\"services\": {\"ollama\": {}}}, {\"services\": {\"ollama\": {\"port\": \"abc\"}}}):\n    rerun(config=cfg)\n    assert port == 8080, (cfg, port)",
+  "why": "EAFP over a nested lookup: KeyError (missing), TypeError (None[...]), ValueError (int('abc'))."
+ },
+ {
+  "id": "06_exceptions.ex06", "level": "medium",
+  "prompt": "Delete every key in `keys` from `cache` using contextlib.suppress; a missing key must not stop the later deletes.",
+  "given": "cache = {\"a\": 1, \"b\": 2, \"c\": 3}\nkeys = [\"a\", \"missing\", \"c\"]",
+  "answer": "from contextlib import suppress\nfor key in keys:\n    with suppress(KeyError):\n        del cache[key]",
+  "check": "assert cache == {\"b\": 2}, f\"{cache}: put the with suppress(...) INSIDE the loop\"",
+  "why": "suppress(KeyError) is a try/except/pass; wrapping the whole loop stops at the first missing key."
+ },
+ {
+  "id": "06_exceptions.ex07", "level": "medium",
+  "prompt": "Call `fn()` into `result`, logging to `log`: 'try' first; then 'except' (result None) if it raised ValueError, or 'else' if it raised nothing; and always 'finally' last. Other exceptions propagate after 'finally'.",
+  "given": "fn, log = (lambda: 42), []",
+  "setup": "def bad_value():\n    raise ValueError(\"nope\")\ndef bad_key():\n    raise KeyError(\"k\")",
+  "answer": "log.append(\"try\")\ntry:\n    result = fn()\nexcept ValueError:\n    log.append(\"except\")\n    result = None\nelse:\n    log.append(\"else\")\nfinally:\n    log.append(\"finally\")",
+  "check": "assert (result, log) == (42, [\"try\", \"else\", \"finally\"]), (result, log)\nrerun(fn=bad_value, log=[])\nassert (result, log) == (None, [\"try\", \"except\", \"finally\"]), (result, log)\ntry:\n    rerun(fn=bad_key, log=[])\nexcept KeyError:\n    pass\nelse:\n    raise AssertionError(\"KeyError should propagate\")\nassert log == [\"try\", \"finally\"], log",
+  "why": "Order is try / except / else / finally: else runs only if try raised nothing; finally always runs."
+ },
+ {
+  "id": "06_exceptions.ex08", "level": "medium",
+  "prompt": "Define `repl_step(line, commands)`: reset module-level LAST_ERROR to None; split line into name + args; unknown name -> 'unknown command: <name>'; else return str(commands[name](args)). If the handler raises anything, store it in LAST_ERROR and return 'error: <Type>: <msg>'.",
+  "given": "LAST_ERROR = None\ncommands = {\"add\": lambda args: int(args[0]) + int(args[1])}",
+  "answer": "def repl_step(line, commands):\n    global LAST_ERROR\n    LAST_ERROR = None\n    name, *args = line.split()\n    if name not in commands:\n        return f\"unknown command: {name}\"\n    try:\n        return str(commands[name](args))\n    except Exception as e:\n        LAST_ERROR = e\n        return f\"error: {type(e).__name__}: {e}\"",
+  "check": "assert repl_step(\"add 2 3\", commands) == \"5\", repl_step(\"add 2 3\", commands)\nassert LAST_ERROR is None\nout = repl_step(\"add 2 x\", commands)\nassert out == \"error: ValueError: invalid literal for int() with base 10: 'x'\", out\nassert isinstance(LAST_ERROR, ValueError), f\"LAST_ERROR is {LAST_ERROR!r}: did you declare `global LAST_ERROR`?\"\nassert repl_step(\"add 2\", commands) == \"error: IndexError: list index out of range\"\nassert repl_step(\"fly\", commands) == \"unknown command: fly\"\nassert LAST_ERROR is None, \"a step that doesn't fail resets LAST_ERROR\"",
+  "why": "Look up the handler in a dict and call it; `global` to assign a module variable; `except Exception as e` as the REPL's catch-all."
+ },
+ {
+  "id": "06_exceptions.ex09", "level": "medium",
+  "prompt": "Define `BookingConflict(BookingError)` constructed as BookingConflict(room, start, end): str(e) is 'room A is already booked 9-11', and room/start/end are kept as attributes.",
+  "given": "class BookingError(Exception):\n    \"\"\"Base for every booking error.\"\"\"",
+  "answer": "class BookingConflict(BookingError):\n    def __init__(self, room, start, end):\n        super().__init__(f\"room {room} is already booked {start}-{end}\")\n        self.room, self.start, self.end = room, start, end",
+  "check": "e = BookingConflict(\"A\", 9, 11)\nassert str(e) == \"room A is already booked 9-11\", f\"{str(e)!r}: call super().__init__(message)\"\nassert (e.room, e.start, e.end) == (\"A\", 9, 11)\ntry:\n    raise BookingConflict(\"B\", 1, 2)\nexcept BookingError as caught:\n    assert caught.room == \"B\"",
+  "why": "Custom exceptions pass the message to super().__init__ and stash extra data as attributes; catch the base to get all."
+ },
+ {
+  "id": "06_exceptions.ex10", "level": "medium",
+  "prompt": "Define `load_config(text)`: json.loads it; on a JSON error raise ConfigError(f'invalid JSON: {e.msg}') chained to the original; if `data['model']` raises KeyError, raise ConfigError('missing key: model') with the KeyError context hidden. Return the dict.",
+  "given": "import json\nclass ConfigError(Exception):\n    pass",
+  "answer": "def load_config(text):\n    try:\n        data = json.loads(text)\n    except json.JSONDecodeError as e:\n        raise ConfigError(f\"invalid JSON: {e.msg}\") from e\n    try:\n        data[\"model\"]\n    except KeyError:\n        raise ConfigError(\"missing key: model\") from None\n    return data",
+  "check": "assert load_config('{\"model\": \"phi3\"}') == {\"model\": \"phi3\"}\ntry:\n    load_config('{\"model\": ')\nexcept ConfigError as e:\n    assert str(e).startswith(\"invalid JSON: \"), str(e)\n    assert isinstance(e.__cause__, json.JSONDecodeError), f\"__cause__ is {e.__cause__!r}: use `raise ... from e`\"\nelse:\n    raise AssertionError(\"bad JSON should raise ConfigError\")\ntry:\n    load_config('{\"timeout\": 5}')\nexcept ConfigError as e:\n    assert str(e) == \"missing key: model\", str(e)\n    assert e.__suppress_context__ and e.__cause__ is None, \"use `raise ... from None` to hide the KeyError\"\nelse:\n    raise AssertionError(\"missing model should raise ConfigError\")",
+  "why": "`raise New(...) from e` keeps the cause in the traceback; `from None` hides the noisy context."
+ },
+ {
+  "id": "06_exceptions.ex11", "level": "advanced",
+  "prompt": "Define `run_job(pool, fn, log)`: pop a worker from `pool` and return fn(worker). If fn raises, append '<worker>: <Type>: <msg>' to log and re-raise the SAME exception. The worker goes back into the pool no matter what.",
+  "answer": "def run_job(pool, fn, log):\n    worker = pool.pop()\n    try:\n        return fn(worker)\n    except Exception as e:\n        log.append(f\"{worker}: {type(e).__name__}: {e}\")\n        raise\n    finally:\n        pool.append(worker)",
+  "check": "pool, log = [\"w1\", \"w2\"], []\nassert run_job(pool, lambda w: f\"ran on {w}\", log) == \"ran on w2\"\nassert sorted(pool) == [\"w1\", \"w2\"], f\"worker not returned after success: {pool}\"\nboom = ValueError(\"boom\")\ndef fails(worker):\n    raise boom\ntry:\n    run_job(pool, fails, log)\nexcept Exception as got:\n    assert got is boom, f\"got {type(got).__name__}: re-raise the same exception (bare `raise`), don't wrap it\"\nelse:\n    raise AssertionError(\"the exception should propagate\")\nassert sorted(pool) == [\"w1\", \"w2\"], f\"worker not returned after failure: {pool}\"\nassert log == [\"w2: ValueError: boom\"], log",
+  "why": "finally releases the resource on every path; bare `raise` re-raises the current exception with its traceback."
+ },
+ {
+  "id": "06_exceptions.ex12", "level": "advanced",
+  "prompt": "Define a generator-based context manager `loaded(name, log)`: append 'load <name>', yield name to the with-body, and ALWAYS append 'unload <name>', even when the body raises (the exception still propagates).",
+  "answer": "from contextlib import contextmanager\n@contextmanager\ndef loaded(name, log):\n    log.append(f\"load {name}\")\n    try:\n        yield name\n    finally:\n        log.append(f\"unload {name}\")",
+  "check": "log = []\nwith loaded(\"phi3\", log) as model:\n    assert model == \"phi3\", model\n    assert log == [\"load phi3\"], log\nassert log == [\"load phi3\", \"unload phi3\"], log\nlog, boom = [], ValueError(\"bad prompt\")\ntry:\n    with loaded(\"phi3\", log):\n        raise boom\nexcept ValueError as got:\n    assert got is boom\nelse:\n    raise AssertionError(\"the body's exception was swallowed; let it propagate\")\nassert log == [\"load phi3\", \"unload phi3\"], f\"{log}: wrap the yield in try/finally\"",
+  "why": "@contextmanager: the body's exception is raised AT the yield, so cleanup after a bare yield gets skipped; use try/finally."
+ },
+ {
+  "id": "06_exceptions.ex13", "level": "advanced",
+  "prompt": "Define `retry(fn, attempts, base_delay, retry_on, sleep)`: call fn up to `attempts` times, retrying only exceptions in the tuple `retry_on`, calling sleep(base_delay * 2**i) between tries (never after the last). Re-raise the last error when out of attempts.",
+  "given": "# provider.FlakyProvider(fail_times=N).get_temp(city): first N calls raise provider.Timeout",
+  "setup": "import types\ndef _make_provider():\n    provider = types.ModuleType(\"provider\")\n    class ProviderError(Exception): pass\n    class UnknownCity(ProviderError): pass\n    class Timeout(ProviderError): pass\n    temps = {\"durham\": 21.5, \"raleigh\": 23.0, \"cary\": 22.1, \"new york\": 15.8}\n    def get_temp(city):\n        key = city.strip().lower()\n        if key not in temps:\n            raise UnknownCity(f\"no data for {city!r}\")\n        return temps[key]\n    class FlakyProvider:\n        def __init__(self, fail_times=0):\n            self.fail_times, self.calls = fail_times, 0\n        def get_temp(self, city):\n            self.calls += 1\n            if self.calls <= self.fail_times:\n                raise Timeout(f\"timed out on call {self.calls}\")\n            return get_temp(city)\n    for obj in (ProviderError, UnknownCity, Timeout, get_temp, FlakyProvider):\n        setattr(provider, obj.__name__, obj)\n    return provider\nprovider = _make_provider()\ndel _make_provider",
+  "answer": "def retry(fn, attempts, base_delay, retry_on, sleep):\n    for i in range(attempts):\n        try:\n            return fn()\n        except retry_on:\n            if i == attempts - 1:\n                raise\n            sleep(base_delay * 2 ** i)",
+  "check": "kw = dict(retry_on=(provider.Timeout,), base_delay=0.5)\np, delays = provider.FlakyProvider(fail_times=2), []\nassert retry(lambda: p.get_temp(\"durham\"), attempts=4, sleep=delays.append, **kw) == 21.5\nassert delays == [0.5, 1.0], f\"delays {delays}: base_delay * 2 ** i\"\np, delays = provider.FlakyProvider(fail_times=5), []\ntry:\n    retry(lambda: p.get_temp(\"durham\"), attempts=3, sleep=delays.append, **kw)\nexcept provider.Timeout as e:\n    assert str(e) == \"timed out on call 3\", f\"re-raise the LAST error, got {e}\"\nelse:\n    raise AssertionError(\"should re-raise Timeout after the last attempt\")\nassert delays == [0.5, 1.0], f\"delays {delays}: no sleep after the final attempt\"\np, delays = provider.FlakyProvider(), []\ntry:\n    retry(lambda: p.get_temp(\"atlantis\"), attempts=3, sleep=delays.append, **kw)\nexcept provider.UnknownCity:\n    pass\nassert (delays, p.calls) == ([], 1), \"UnknownCity isn't in retry_on: fail fast\"",
+  "why": "`except retry_on:` accepts a tuple in a variable; bare `raise` on the last attempt; inject sleep so tests don't wait."
+ },
+ {
+  "id": "06_exceptions.ex14", "level": "advanced",
+  "prompt": "Define `ValidationError`, catchable as ValueError, built from a list of messages: `.errors` keeps the list and str(e) joins them with '; '.",
+  "answer": "class ValidationError(ValueError):\n    def __init__(self, errors):\n        super().__init__(\"; \".join(errors))\n        self.errors = errors",
+  "check": "try:\n    raise ValidationError([\"room: required\", \"start: must be an int 0-24\"])\nexcept ValueError as e:\n    assert e.errors == [\"room: required\", \"start: must be an int 0-24\"], e.errors\n    assert str(e) == \"room: required; start: must be an int 0-24\", f\"{str(e)!r}: pass the joined text to super().__init__\"\nexcept Exception:\n    raise AssertionError(\"ValidationError must subclass ValueError\")",
+  "why": "Collect every problem first, then raise ONE exception carrying the list; subclass ValueError so generic handlers catch it."
+ }
+]

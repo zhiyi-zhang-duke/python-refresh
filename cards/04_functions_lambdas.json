@@ -1,0 +1,110 @@
+[
+ {
+  "id": "04_functions_lambdas.ex01", "level": "easy",
+  "prompt": "Set `names` to the model names, largest size_gb first, ties by name A-Z. Don't reorder `models`.",
+  "given": "models = [\n    {'name': 'phi3:mini', 'size_gb': 2.3},\n    {'name': 'llama3:70b', 'size_gb': 39.0},\n    {'name': 'gemma:2b', 'size_gb': 1.6},\n    {'name': 'aya:8b', 'size_gb': 2.3},\n]",
+  "answer": "names = [m[\"name\"] for m in sorted(models, key=lambda m: (-m[\"size_gb\"], m[\"name\"]))]",
+  "check": "assert names == ['llama3:70b', 'aya:8b', 'phi3:mini', 'gemma:2b'], f\"{names} (reverse=True flips the name tiebreak too)\"\nassert [m['name'] for m in models] == ['phi3:mini', 'llama3:70b', 'gemma:2b', 'aya:8b'], \"models was reordered (sorted, not .sort)\"",
+  "why": "Tuple key with the number negated flips only that part; reverse=True would flip the name tiebreak too."
+ },
+ {
+  "id": "04_functions_lambdas.ex02", "level": "easy",
+  "prompt": "Set `names` to the names of users whose 'active' is truthy, in order. A user with no 'active' key is inactive.",
+  "given": "users = [{'name': 'ana', 'active': True}, {'name': 'bo', 'active': False}, {'name': 'cy'}, {'name': 'di', 'active': True}]",
+  "answer": "names = [u[\"name\"] for u in users if u.get(\"active\")]",
+  "check": "assert names == ['ana', 'di'], names",
+  "why": "A comprehension with an if reads better than list(map(lambda, filter(lambda, ...)))."
+ },
+ {
+  "id": "04_functions_lambdas.ex03", "level": "easy",
+  "prompt": "Write `latency_stats(samples)` returning (lowest, highest, mean), or (None, None, None) when empty. Then unpack it for `samples` into `lo`, `hi`, `avg`.",
+  "given": "samples = [12, 40, 23]",
+  "answer": "def latency_stats(samples):\n    if not samples:\n        return None, None, None\n    return min(samples), max(samples), sum(samples) / len(samples)\nlo, hi, avg = latency_stats(samples)",
+  "check": "assert (lo, hi, avg) == (12, 40, 25.0), (lo, hi, avg)\nassert latency_stats([]) == (None, None, None), latency_stats([])",
+  "why": "`return a, b, c` returns one tuple; the caller unpacks it."
+ },
+ {
+  "id": "04_functions_lambdas.ex04", "level": "easy",
+  "prompt": "Set `out` by dispatching `line`: the first word (lowercased) names a command in `commands` (name -> (handler, help)); pass the remaining words to the handler as ONE list. Unknown -> 'unknown command: <name>'.",
+  "given": "commands = {\n    'load': (lambda args: 'loaded ' + ' '.join(args), 'Load a model'),\n    'count': (lambda args: f'{len(args)} args', 'Count args'),\n}\nline = '  LOAD phi3 mini\\n'",
+  "answer": "parts = line.split()\nname, args = parts[0].lower(), parts[1:]\nout = commands[name][0](args) if name in commands else f\"unknown command: {name}\"",
+  "check": "assert out == 'loaded phi3 mini', out\nrerun(line='count a b c')\nassert out == '3 args', f\"{out} (pass the list, not *args)\"\nrerun(line='explode now')\nassert out == 'unknown command: explode', out",
+  "why": "Functions are values: commands[name][0] is the handler, (args) calls it."
+ },
+ {
+  "id": "04_functions_lambdas.ex05", "level": "medium",
+  "prompt": "Write `book` taking a room, then any number of guest names, then `start` (keyword-only, required) and `hours` (keyword-only, default 1). Return {'room', 'guests' (a list), 'start', 'hours'}.",
+  "answer": "def book(room, *guests, start, hours=1):\n    return {\"room\": room, \"guests\": list(guests), \"start\": start, \"hours\": hours}",
+  "check": "assert book('A', 'jack', 'becca', start=9) == {'room': 'A', 'guests': ['jack', 'becca'], 'start': 9, 'hours': 1}, book('A', 'jack', 'becca', start=9)\nassert book('B', start=14, hours=2) == {'room': 'B', 'guests': [], 'start': 14, 'hours': 2}\nfor bad in (\"book('A', 'jack', 9)\", \"book('A')\", \"book('A', start=9, minutes=30)\"):\n    try:\n        eval(bad)\n    except TypeError:\n        pass\n    else:\n        raise AssertionError(f\"{bad} should raise TypeError (start must be keyword-only and required)\")",
+  "why": "Every parameter after *args is keyword-only; leave it without a default to make it required."
+ },
+ {
+  "id": "04_functions_lambdas.ex06", "level": "medium",
+  "prompt": "Write `make_counter(start=0)` returning a function that returns start, start+1, ... on successive calls. Each counter is independent.",
+  "answer": "def make_counter(start=0):\n    current = start\n    def counter():\n        nonlocal current\n        current += 1\n        return current - 1\n    return counter",
+  "check": "c = make_counter(5)\nassert [c(), c(), c()] == [5, 6, 7]\nd = make_counter()\nassert d() == 0, \"a new counter starts fresh\"\nassert c() == 8, \"counters must not share state\"",
+  "why": "Assigning to an enclosing variable needs `nonlocal`, or += makes a new local (UnboundLocalError)."
+ },
+ {
+  "id": "04_functions_lambdas.ex07", "level": "medium",
+  "prompt": "Set `loggers` to {level: logger} for each of `levels`, where logger(msg) calls write_log(log, level, msg). Use functools.partial.",
+  "given": "# write_log(log, level, msg) appends \"[LEVEL] msg\" to log\nlog, levels = [], ['info', 'warning', 'error']",
+  "setup": "def write_log(log, level, msg):\n    log.append(f'[{level.upper()}] {msg}')",
+  "answer": "from functools import partial\nloggers = {lvl: partial(write_log, log, lvl) for lvl in levels}",
+  "check": "loggers['error']('disk full')\nloggers['info']('ok')\nloggers['warning']('slow')\nassert log == ['[ERROR] disk full', '[INFO] ok', '[WARNING] slow'], f\"{log} (a lambda in a loop late-binds lvl)\"",
+  "why": "partial binds the args NOW; a lambda closing over the loop variable sees only its last value."
+ },
+ {
+  "id": "04_functions_lambdas.ex08", "level": "medium",
+  "prompt": "Write `pipeline(*steps)` returning a function that feeds its input through each step LEFT to right. No steps -> it returns its input unchanged.",
+  "answer": "from functools import reduce\ndef pipeline(*steps):\n    return lambda value: reduce(lambda acc, f: f(acc), steps, value)",
+  "check": "assert pipeline()(42) == 42, \"no steps: the input comes back unchanged\"\nassert pipeline(str.strip, str.lower, str.split)('  Load PHI3  ') == ['load', 'phi3']\nassert pipeline(lambda x: x + 1, lambda x: x * 10)(2) == 30, \"order matters: (2+1)*10\"",
+  "why": "reduce(fn, steps, initial): the initial value makes the empty case work."
+ },
+ {
+  "id": "04_functions_lambdas.ex09", "level": "medium",
+  "prompt": "Read lines with `read('> ')` (behaves like input()) and append `handle(line)` for each to `out`, stopping on Ctrl-D OR Ctrl-C. Always append 'bye' at the end.",
+  "given": "# read(prompt) returns lines, then raises like Ctrl-D; handle(line) returns the output string\nout = []",
+  "setup": "def _fake_input(lines, end=EOFError):\n    it = iter(lines)\n    prompts = []\n    def read(prompt=''):\n        prompts.append(prompt)\n        try:\n            return next(it)\n        except StopIteration:\n            raise end from None\n    read.prompts = prompts\n    return read\ndef handle(line):\n    return 'got ' + line.strip()\nread = _fake_input(['load phi3', 'count x'])",
+  "answer": "while True:\n    try:\n        line = read(\"> \")\n    except (EOFError, KeyboardInterrupt):\n        break\n    out.append(handle(line))\nout.append(\"bye\")",
+  "check": "assert out == ['got load phi3', 'got count x', 'bye'], out\nassert read.prompts[:1] == ['> '], read.prompts\ntry:\n    rerun(read=_fake_input(['x'], end=KeyboardInterrupt), out=[])\nexcept KeyboardInterrupt:\n    raise AssertionError(\"KeyboardInterrupt escaped: catch (EOFError, KeyboardInterrupt)\") from None\nassert out == ['got x', 'bye'], out",
+  "why": "except (EOFError, KeyboardInterrupt) catches either; KeyboardInterrupt isn't an Exception subclass."
+ },
+ {
+  "id": "04_functions_lambdas.ex10", "level": "advanced",
+  "prompt": "Write decorator `count_calls(fn)`: forward any args/kwargs and return fn's result, count calls in a `.calls` attribute on the wrapper, and keep fn's __name__ and __doc__.",
+  "answer": "import functools\ndef count_calls(fn):\n    @functools.wraps(fn)\n    def wrapper(*args, **kwargs):\n        wrapper.calls += 1\n        return fn(*args, **kwargs)\n    wrapper.calls = 0\n    return wrapper",
+  "check": "def greet(name, *, punct='!'):\n    \"\"\"Say hi.\"\"\"\n    return 'hi ' + name + punct\ng = count_calls(greet)\no = count_calls(lambda: 1)\nassert g.calls == 0\nassert g('jack') == 'hi jack!' and g('becca', punct='?') == 'hi becca?'\no()\nassert (g.calls, o.calls) == (2, 1), (g.calls, o.calls)\nassert (g.__name__, g.__doc__) == ('greet', 'Say hi.'), f\"{(g.__name__, g.__doc__)}: use @functools.wraps(fn)\"",
+  "why": "@functools.wraps(fn) copies __name__/__doc__; *args, **kwargs forwards everything; functions take attributes."
+ },
+ {
+  "id": "04_functions_lambdas.ex11", "level": "advanced",
+  "prompt": "Write decorator FACTORY `timed(sink, clock)`: after each call append (fn.__name__, seconds) to `sink`, timed with `clock()`. Record it even when fn raises, and let the exception through.",
+  "answer": "def timed(sink, clock):\n    def decorator(fn):\n        def wrapper(*args, **kwargs):\n            start = clock()\n            try:\n                return fn(*args, **kwargs)\n            finally:\n                sink.append((fn.__name__, clock() - start))\n        return wrapper\n    return decorator",
+  "check": "records = []\nticks = iter([10.0, 10.25, 20.0, 21.0])\nclock = lambda: next(ticks)\n@timed(records, clock=clock)\ndef add(a, b):\n    return a + b\n@timed(records, clock=clock)\ndef boom():\n    raise RuntimeError('nope')\nassert add(1, b=2) == 3\ntry:\n    boom()\nexcept RuntimeError:\n    pass\nelse:\n    raise AssertionError(\"boom() must still raise\")\nassert records == [('add', 0.25), ('boom', 1.0)], f\"{records} (the failing call must be recorded too)\"",
+  "why": "Three levels: factory(args) -> decorator(fn) -> wrapper(*a, **kw); finally runs on return AND raise."
+ },
+ {
+  "id": "04_functions_lambdas.ex12", "level": "advanced",
+  "prompt": "Write decorator factory `retry(times, exceptions)`: call fn up to `times` attempts, retrying only on the `exceptions` tuple; after the last attempt re-raise that exception. Other exceptions propagate immediately.",
+  "answer": "def retry(times, exceptions):\n    def decorator(fn):\n        def wrapper(*args, **kwargs):\n            for attempt in range(times):\n                try:\n                    return fn(*args, **kwargs)\n                except exceptions:\n                    if attempt == times - 1:\n                        raise\n        return wrapper\n    return decorator",
+  "check": "attempts = []\n@retry(3, (ConnectionError,))\ndef flaky():\n    attempts.append(1)\n    if len(attempts) < 3:\n        raise ConnectionError('try again')\n    return 'ok'\nassert flaky() == 'ok' and len(attempts) == 3, len(attempts)\nalways = []\n@retry(2, (ValueError, ConnectionError))\ndef broken():\n    always.append(1)\n    raise ValueError(f'fail {len(always)}')\ntry:\n    broken()\nexcept ValueError as e:\n    assert str(e) == 'fail 2', f\"re-raised {e!r}, want the LAST failure\"\nelse:\n    raise AssertionError(\"must re-raise after the last attempt\")\nassert len(always) == 2, f\"{len(always)} attempts, want exactly `times`\"\nother = []\n@retry(5, (ConnectionError,))\ndef wrong_kind():\n    other.append(1)\n    raise KeyError('x')\ntry:\n    wrong_kind()\nexcept KeyError:\n    pass\nassert len(other) == 1, f\"{len(other)} attempts: exceptions not in the tuple must not be retried\"",
+  "why": "`except exceptions:` accepts a tuple; a bare `raise` re-raises the current exception with its traceback."
+ },
+ {
+  "id": "04_functions_lambdas.ex13", "level": "advanced",
+  "prompt": "Write decorator `memoize(fn)`: cache results by positional args in a `.cache` dict on the wrapper ({args_tuple: result}). Same args -> fn is NOT called again, even if the cached result is falsy.",
+  "answer": "def memoize(fn):\n    def wrapper(*args):\n        if args not in wrapper.cache:\n            wrapper.cache[args] = fn(*args)\n        return wrapper.cache[args]\n    wrapper.cache = {}\n    return wrapper",
+  "check": "calls = []\ndef area(w, h):\n    calls.append((w, h))\n    return w * h\nf = memoize(area)\nassert (f(2, 3), f(2, 3), f(3, 2)) == (6, 6, 6)\nassert calls == [(2, 3), (3, 2)], calls\nassert f.cache == {(2, 3): 6, (3, 2): 6}, f.cache\nnones = []\ng = memoize(lambda x: nones.append(x))\ng(1)\ng(1)\nassert nones == [1], f\"{nones}: a cached None is still a hit (use `in`, not truthiness)\"\n@memoize\ndef fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\nassert fib(90) == 2880067194370816120",
+  "why": "*args is already a hashable tuple; test `args in cache`, not cache.get(args)."
+ },
+ {
+  "id": "04_functions_lambdas.ex14", "level": "advanced",
+  "prompt": "Write decorator factory `command(name, help='')` that registers the decorated function in COMMANDS as name -> (fn, help) and returns fn UNCHANGED. A name already registered raises ValueError.",
+  "given": "COMMANDS = {}",
+  "setup": "import shlex\ndef run_command(line):\n    parts = shlex.split(line)\n    if not parts:\n        return ''\n    if parts[0] not in COMMANDS:\n        return f'unknown command: {parts[0]}'\n    return COMMANDS[parts[0]][0](parts[1:])",
+  "answer": "def command(name, help=\"\"):\n    def decorator(fn):\n        if name in COMMANDS:\n            raise ValueError(f\"duplicate command: {name}\")\n        COMMANDS[name] = (fn, help)\n        return fn\n    return decorator",
+  "check": "def weather(args):\n    return 'Weather for ' + ' '.join(args)\ndef count(args):\n    return str(len(args))\nreturned = command('weather', help='Show weather')(weather)\nassert returned is weather, f\"the decorator returned {returned!r}, not the original function\"\ncommand('count')(count)\nassert COMMANDS == {'weather': (weather, 'Show weather'), 'count': (count, '')}, COMMANDS\nassert run_command('weather \"New York\"') == 'Weather for New York'\ntry:\n    command('weather')(weather)\nexcept ValueError:\n    pass\nelse:\n    raise AssertionError(\"re-registering 'weather' must raise ValueError\")",
+  "why": "A registration decorator stores fn and returns it as-is; mutating a module-level dict needs no `global`."
+ }
+]

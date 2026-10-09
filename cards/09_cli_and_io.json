@@ -1,0 +1,112 @@
+[
+ {
+  "id": "09_cli_and_io.ex01", "level": "easy",
+  "prompt": "Read `stdin` line by line into `commands`: each line stripped, skipping blank lines and comment lines starting with '#' (even indented ones).",
+  "given": "import io\nstdin = io.StringIO(\"list\\n\\n  load phi3  \\n# a comment\\nexit\")",
+  "answer": "stripped = (line.strip() for line in stdin)\ncommands = [s for s in stripped if s and not s.startswith(\"#\")]",
+  "check": "assert commands == [\"list\", \"load phi3\", \"exit\"], commands\nrerun(stdin=io.StringIO(\"  # indented comment\\n   \\nrun x\\n\"))\nassert commands == [\"run x\"], f\"{commands}: strip BEFORE checking startswith('#')\"",
+  "why": "Iterating a stream yields lines with their '\\n'; strip first, then test for blank and '#'."
+ },
+ {
+  "id": "09_cli_and_io.ex02", "level": "easy",
+  "prompt": "Print each key/value of `pairs` to `out` as a 'key: value' line, using print's sep= and file=.",
+  "given": "import io\npairs = {\"model\": \"phi3\", \"rounds\": 3}\nout = io.StringIO()",
+  "answer": "for key, value in pairs.items():\n    print(key, value, sep=\": \", file=out)",
+  "check": "assert out.getvalue() == \"model: phi3\\nrounds: 3\\n\", repr(out.getvalue())",
+  "why": "print(a, b, sep=': ', file=stream) writes to any text stream and converts non-strings for you."
+ },
+ {
+  "id": "09_cli_and_io.ex03", "level": "easy",
+  "prompt": "On ONE line of `out`, write `label`, then one '.' per step (flushing after each dot), then ' done' and a newline.",
+  "given": "label, steps = \"loading\", 3\nout = FlushCountingIO()   # a StringIO that counts flush() calls",
+  "setup": "import io\nclass FlushCountingIO(io.StringIO):\n    flushes = 0\n    def flush(self):\n        self.flushes += 1\n        super().flush()",
+  "answer": "print(label, end=\"\", file=out)\nfor _ in range(steps):\n    print(\".\", end=\"\", file=out, flush=True)\nprint(\" done\", file=out)",
+  "check": "assert out.getvalue() == \"loading... done\\n\", repr(out.getvalue())\nassert out.flushes >= steps, f\"{out.flushes} flushes: pass flush=True so a real terminal shows each dot now\"",
+  "why": "end='' suppresses the newline; flush=True pushes partial output to a terminal immediately."
+ },
+ {
+  "id": "09_cli_and_io.ex04", "level": "easy",
+  "prompt": "Read `stdin` with readline() until EOF or an 'exit'/'quit' line (any case), appending each non-blank stripped line to `echoed`. A blank line must NOT end the loop.",
+  "given": "import io\nstdin = io.StringIO(\"hi\\n\\n  there \\nEXIT\\nnever\\n\")\nechoed = []",
+  "answer": "while line := stdin.readline():\n    line = line.strip()\n    if line.lower() in (\"exit\", \"quit\"):\n        break\n    if line:\n        echoed.append(line)",
+  "check": "assert echoed == [\"hi\", \"there\"], f\"{echoed}: a blank line is '\\\\n' (truthy); only '' means EOF, so strip AFTER the EOF check\"\nassert stdin.read() == \"never\\n\", \"should stop reading at EXIT\"\nrerun(stdin=io.StringIO(\"hi\"), echoed=[])\nassert echoed == [\"hi\"], echoed",
+  "why": "readline() returns '' only at EOF and '\\n' for a blank line; test for EOF before stripping."
+ },
+ {
+  "id": "09_cli_and_io.ex05", "level": "medium",
+  "prompt": "Write `main(argv, out, err) -> int` for `greet NAME...`: '--help' prints USAGE to out and returns 0; no names prints USAGE to err and returns 2; otherwise prints 'Hello, <names joined by spaces>.' to out and returns 0.",
+  "given": "import io\nUSAGE = \"usage: greet NAME...\"",
+  "answer": "def main(argv, out, err):\n    if \"--help\" in argv:\n        print(USAGE, file=out)\n        return 0\n    if not argv:\n        print(USAGE, file=err)\n        return 2\n    print(f\"Hello, {' '.join(argv)}.\", file=out)\n    return 0",
+  "check": "def call(argv):\n    out, err = io.StringIO(), io.StringIO()\n    return main(argv, out, err), out.getvalue(), err.getvalue()\nassert call([\"Ada\", \"Lovelace\"]) == (0, \"Hello, Ada Lovelace.\\n\", \"\"), call([\"Ada\", \"Lovelace\"])\nassert call([]) == (2, \"\", USAGE + \"\\n\"), f\"{call([])}: usage error -> message on err, exit 2, nothing on out\"\nassert call([\"--help\"]) == (0, USAGE + \"\\n\", \"\"), f\"{call(['--help'])}: asked-for help goes to out with exit 0\"",
+  "why": "Asked-for help is success (stdout, 0); a usage error goes to stderr with exit 2. Run it as sys.exit(main(sys.argv[1:]))."
+ },
+ {
+  "id": "09_cli_and_io.ex06", "level": "medium",
+  "prompt": "Set `line` to e.g. '2026-09-14 10:03:22 ERROR model not loaded' (timestamp from `when`, level uppercased) and APPEND it plus a newline to `path`, creating missing parent folders. Running it twice must keep both lines.",
+  "given": "from datetime import datetime\npath = tmp / \"logs\" / \"deep\" / \"olm.log\"   # tmp is a fresh temp dir; logs/deep doesn't exist yet\nwhen, level, message = datetime(2026, 9, 14, 10, 3, 22), \"error\", \"model not loaded\"",
+  "setup": "import atexit, shutil, tempfile\nfrom pathlib import Path\ntmp = Path(tempfile.mkdtemp())\natexit.register(shutil.rmtree, tmp, True)",
+  "answer": "line = f\"{when.strftime('%Y-%m-%d %H:%M:%S')} {level.upper()} {message}\"\npath.parent.mkdir(parents=True, exist_ok=True)\nwith open(path, \"a\", encoding=\"utf-8\") as f:\n    f.write(line + \"\\n\")",
+  "check": "assert line == \"2026-09-14 10:03:22 ERROR model not loaded\", line\nrerun(when=datetime(2026, 9, 14, 10, 3, 25), level=\"INFO\", message=\"loaded phi3\")\ntext = path.read_text(encoding=\"utf-8\")\nassert text == \"2026-09-14 10:03:22 ERROR model not loaded\\n2026-09-14 10:03:25 INFO loaded phi3\\n\", f\"{text!r}: 'w' truncates, 'a' appends; write() adds no newline\"",
+  "why": "open(p, 'a') appends ('w' truncates); mkdir(parents=True, exist_ok=True) is safe to repeat."
+ },
+ {
+  "id": "09_cli_and_io.ex07", "level": "medium",
+  "prompt": "Build an argparse parser (prog 'weather'): positional `city` of 1+ words, `--days` int default 1, `--unit` C or F default F, `-v/--verbose` flag. Parse `argv` into `args`; on bad input set `args = None` instead of exiting.",
+  "given": "import argparse\nargv = [\"New\", \"York\", \"--unit\", \"C\", \"--days\", \"3\"]",
+  "answer": "p = argparse.ArgumentParser(prog=\"weather\")\np.add_argument(\"city\", nargs=\"+\")\np.add_argument(\"--days\", type=int, default=1)\np.add_argument(\"--unit\", choices=[\"C\", \"F\"], default=\"F\")\np.add_argument(\"-v\", \"--verbose\", action=\"store_true\")\ntry:\n    args = p.parse_args(argv)\nexcept SystemExit:\n    args = None",
+  "check": "assert args is not None and vars(args) == {\"city\": [\"New\", \"York\"], \"days\": 3, \"unit\": \"C\", \"verbose\": False}, f\"{args} (did you pass argv to parse_args?)\"\nrerun(argv=[\"-v\", \"Durham\"])\nassert args is not None and vars(args) == {\"city\": [\"Durham\"], \"days\": 1, \"unit\": \"F\", \"verbose\": True}, args\nrerun(argv=[\"Durham\", \"--unit\", \"K\"])\nassert args is None, \"bad input: argparse raises SystemExit(2); catch it and set args = None\"\nrerun(argv=[])\nassert args is None, \"city is required\"",
+  "why": "parse_args(argv) (not the default sys.argv); bad input raises SystemExit, so catch it in a REPL or test."
+ },
+ {
+  "id": "09_cli_and_io.ex08", "level": "medium",
+  "prompt": "Write each `notes` entry to root/notes/<name>.md as UTF-8 (create folders as needed), then set `stems` to the sorted file stems of all .md files in that folder.",
+  "given": "root = tmp / \"vault\"   # root/notes/ already holds old.md and readme.txt\nnotes = {\"b\": \"beta\", \"a\": \"älpha\"}",
+  "setup": "import atexit, shutil, tempfile\nfrom pathlib import Path\ntmp = Path(tempfile.mkdtemp())\natexit.register(shutil.rmtree, tmp, True)\n\n(tmp / \"vault\" / \"notes\").mkdir(parents=True)\n(tmp / \"vault\" / \"notes\" / \"old.md\").write_text(\"x\", encoding=\"utf-8\")\n(tmp / \"vault\" / \"notes\" / \"readme.txt\").write_text(\"x\", encoding=\"utf-8\")",
+  "answer": "folder = root / \"notes\"\nfolder.mkdir(parents=True, exist_ok=True)\nfor name, text in notes.items():\n    (folder / f\"{name}.md\").write_text(text, encoding=\"utf-8\")\nstems = sorted(p.stem for p in folder.glob(\"*.md\"))",
+  "check": "assert stems == [\"a\", \"b\", \"old\"], stems\nassert (root / \"notes\" / \"a.md\").read_bytes() == \"älpha\".encode(\"utf-8\"), \"pass encoding='utf-8' to write_text (Windows defaults to cp1252)\"\nrerun(root=tmp / \"x\" / \"y\", notes={\"n\": \"1\"})\nassert stems == [\"n\"], f\"{stems}: create missing parent folders too\"",
+  "why": "Path / 'x' joins, write_text(..., encoding='utf-8'), glob order isn't guaranteed so sort, .stem drops the suffix."
+ },
+ {
+  "id": "09_cli_and_io.ex09", "level": "medium",
+  "prompt": "Set `data` to a copy of `defaults` overlaid with the JSON object in `path` (missing file or invalid JSON: just the defaults; never mutate `defaults`), then save `data` back to `path` with json.dump.",
+  "given": "import json\npath = tmp / \"settings.json\"   # doesn't exist yet\ndefaults = {\"unit\": \"F\", \"days\": 1}",
+  "setup": "import atexit, shutil, tempfile\nfrom pathlib import Path\ntmp = Path(tempfile.mkdtemp())\natexit.register(shutil.rmtree, tmp, True)",
+  "answer": "data = dict(defaults)\ntry:\n    with open(path, encoding=\"utf-8\") as f:\n        data.update(json.load(f))\nexcept (FileNotFoundError, json.JSONDecodeError):\n    pass\nwith open(path, \"w\", encoding=\"utf-8\") as f:\n    json.dump(data, f, indent=2)",
+  "check": "assert data == {\"unit\": \"F\", \"days\": 1}, data\nassert json.loads(path.read_text(encoding=\"utf-8\")) == data, \"save data back to path with json.dump(data, f)\"\npath.write_text('{\"unit\": \"C\"}', encoding=\"utf-8\")\nrerun()\nassert data == {\"unit\": \"C\", \"days\": 1}, data\nassert defaults == {\"unit\": \"F\", \"days\": 1}, f\"defaults mutated to {defaults}; copy it with dict(defaults)\"\npath.write_text(\"{not json\", encoding=\"utf-8\")\nrerun()\nassert data == {\"unit\": \"F\", \"days\": 1}, f\"{data}: invalid JSON should fall back to defaults\"",
+  "why": "json.load(f)/json.dump(obj, f) take files (loads/dumps take strings); bad JSON raises json.JSONDecodeError."
+ },
+ {
+  "id": "09_cli_and_io.ex10", "level": "advanced",
+  "prompt": "Read `src` into `rows` (a list of dicts) with csv.DictReader and set `total` to the sum of its tokens column; then write the rows sorted by model to `dst` with csv.DictWriter (columns model, ms, tokens; header first).",
+  "given": "import csv\nsrc, dst = tmp / \"runs.csv\", tmp / \"sorted.csv\"   # src has a header row: model,ms,tokens",
+  "setup": "import atexit, shutil, tempfile\nfrom pathlib import Path\ntmp = Path(tempfile.mkdtemp())\natexit.register(shutil.rmtree, tmp, True)\n\n(tmp / \"runs.csv\").write_text(\"model,ms,tokens\\nphi3,120,40\\nllama3,900,50\\nphi3,130,30\\n\", encoding=\"utf-8\")",
+  "answer": "with open(src, newline=\"\", encoding=\"utf-8\") as f:\n    rows = list(csv.DictReader(f))\ntotal = sum(int(r[\"tokens\"]) for r in rows)\nwith open(dst, \"w\", newline=\"\", encoding=\"utf-8\") as f:\n    w = csv.DictWriter(f, fieldnames=[\"model\", \"ms\", \"tokens\"])\n    w.writeheader()\n    w.writerows(sorted(rows, key=lambda r: r[\"model\"]))",
+  "check": "assert total == 120, f\"{total!r}: csv values are all strings; int() them\"\nraw = dst.read_bytes()\nassert b\"\\r\\r\\n\" not in raw, \"blank lines between rows: open the output with newline=''\"\nassert raw.decode(\"utf-8\").splitlines() == [\"model,ms,tokens\", \"llama3,900,50\", \"phi3,120,40\", \"phi3,130,30\"], raw",
+  "why": "Open csv files with newline='' (else Windows writes \\r\\r\\n); DictReader values are always str."
+ },
+ {
+  "id": "09_cli_and_io.ex11", "level": "advanced",
+  "prompt": "Set `widths` to each column's max length over the header and all cells, then `lines` to the header and each row formatted per column with its align char and width, joined by two spaces, trailing spaces stripped.",
+  "given": "headers = [\"model\", \"size\", \"family\"]\nrows = [[\"phi3:mini\", \"2.3\", \"phi\"], [\"llama3:70b\", \"39.0\", \"llama\"]]\nalign = \"<><\"",
+  "answer": "widths = [max(len(x) for x in col) for col in zip(headers, *rows)]\nfmt = lambda vals: \"  \".join(f\"{v:{a}{w}}\" for v, a, w in zip(vals, align, widths)).rstrip()\nlines = [fmt(headers)] + [fmt(r) for r in rows]",
+  "check": "assert widths == [10, 4, 6], widths\nassert lines == [\"model       size  family\", \"phi3:mini    2.3  phi\", \"llama3:70b  39.0  llama\"], f\"{lines} (trailing spaces? rstrip() each line)\"\nrerun(headers=[\"name\", \"n\"], rows=[[\"a\", \"1\"], [\"bb\", \"22\"]], align=\"<<\")\nassert lines == [\"name  n\", \"a     1\", \"bb    22\"], f\"{lines}: rstrip() the trailing padding\"",
+  "why": "zip(headers, *rows) transposes rows into columns; a nested spec f'{v:{a}{w}}' interpolates align and width."
+ },
+ {
+  "id": "09_cli_and_io.ex12", "level": "advanced",
+  "prompt": "Create `parser = RaisingParser(prog='olm')` with REQUIRED subcommands whose name lands in args.cmd: `list` (no args) and `run MODEL PROMPT...` (prompt is 1+ words). Parse `argv` into `args`.",
+  "given": "import argparse\nclass RaisingParser(argparse.ArgumentParser):\n    def error(self, message):       # raise instead of printing + SystemExit\n        raise ValueError(message)\nargv = [\"run\", \"phi3\", \"tell\", \"me\", \"a\", \"joke\"]",
+  "answer": "parser = RaisingParser(prog=\"olm\")\nsub = parser.add_subparsers(dest=\"cmd\", required=True)\nsub.add_parser(\"list\")\nrun = sub.add_parser(\"run\")\nrun.add_argument(\"model\")\nrun.add_argument(\"prompt\", nargs=\"+\")\nargs = parser.parse_args(argv)",
+  "check": "assert vars(args) == {\"cmd\": \"run\", \"model\": \"phi3\", \"prompt\": [\"tell\", \"me\", \"a\", \"joke\"]}, f\"{vars(args)} (dest='cmd' on add_subparsers?)\"\nrerun(argv=[\"list\"])\nassert vars(args) == {\"cmd\": \"list\"}, vars(args)\nfor bad in ([], [\"fly\"], [\"run\", \"phi3\"], [\"list\", \"extra\"]):\n    try:\n        rerun(argv=bad)\n    except ValueError:\n        pass\n    else:\n        raise AssertionError(f\"{bad} should raise ValueError (required=True on add_subparsers?)\")",
+  "why": "add_subparsers(dest='cmd', required=True): without dest you can't tell which ran; without required [] parses fine."
+ },
+ {
+  "id": "09_cli_and_io.ex13", "level": "advanced",
+  "prompt": "Write `main(argv) -> int` for `todo done N`: return 2 if parser.parse_args raises ValueError; load the todo list from JSON `path`; return 1 if N isn't in 1..len; otherwise set that todo's 'done' to True, save the list back to `path`, return 0.",
+  "given": "import json\n# parser (defined for you): a RaisingParser with one subcommand `done N` (N: int);\n# parser.parse_args(argv) raises ValueError on bad usage.\npath = tmp / \"todos.json\"   # [{\"text\": \"buy milk\", \"done\": false}, {\"text\": \"call mom\", \"done\": false}]",
+  "setup": "import atexit, shutil, tempfile\nfrom pathlib import Path\ntmp = Path(tempfile.mkdtemp())\natexit.register(shutil.rmtree, tmp, True)\n\nimport argparse, json\nclass RaisingParser(argparse.ArgumentParser):\n    def error(self, message):\n        raise ValueError(message)\nparser = RaisingParser(prog=\"todo\")\nparser.add_subparsers(dest=\"cmd\", required=True).add_parser(\"done\").add_argument(\"n\", type=int)\n(tmp / \"todos.json\").write_text(json.dumps([{\"text\": \"buy milk\", \"done\": False}, {\"text\": \"call mom\", \"done\": False}]), encoding=\"utf-8\")",
+  "answer": "def main(argv):\n    try:\n        n = parser.parse_args(argv).n\n    except ValueError:\n        return 2\n    todos = json.loads(path.read_text(encoding=\"utf-8\"))\n    if not 1 <= n <= len(todos):\n        return 1\n    todos[n - 1][\"done\"] = True\n    path.write_text(json.dumps(todos, indent=2), encoding=\"utf-8\")\n    return 0",
+  "check": "assert main([\"done\", \"2\"]) == 0\nsaved = json.loads(path.read_text(encoding=\"utf-8\"))\nassert saved == [{\"text\": \"buy milk\", \"done\": False}, {\"text\": \"call mom\", \"done\": True}], saved\nassert main([\"done\", \"9\"]) == 1, \"out of range is a runtime failure: exit 1\"\nassert main([\"done\", \"0\"]) == 1, \"0 is out of range too (todos[-1] is the LAST todo)\"\nassert main([\"done\", \"two\"]) == 2, \"bad usage: exit 2\"\nassert main([]) == 2, \"missing subcommand: exit 2\"\nassert json.loads(path.read_text(encoding=\"utf-8\")) == saved, \"failed commands must not change the file\"",
+  "why": "Exit codes: 0 ok, 1 runtime failure, 2 usage error; validate 1 <= n <= len before indexing (n=0 hits todos[-1])."
+ }
+]

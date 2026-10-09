@@ -1,0 +1,117 @@
+[
+ {
+  "id": "11_concurrency.ex01", "level": "easy",
+  "prompt": "Start one threading.Thread per arg, each running work(i, arg), then wait for all of them. Every thread must be running before you wait on any.",
+  "given": "import threading\nargs = [1, 2, 3]\nresults = [None] * len(args)\ndef work(i, arg):\n    results[i] = square(arg)   # square is provided",
+  "setup": "import threading as _th, time as _time\n_gate = _th.Barrier(3, timeout=0.5)   # all 3 must be running at once\ndef square(x):\n    _gate.wait()\n    _time.sleep(0.05)\n    return x * x",
+  "answer": "threads = [threading.Thread(target=work, args=(i, a)) for i, a in enumerate(args)]\nfor t in threads:\n    t.start()\nfor t in threads:\n    t.join()",
+  "check": "import threading as _th\nassert _th.active_count() == 1, \"threads still running when your lines finished: join() every one\"\nassert results == [1, 4, 9], f\"{results}: threads ran one at a time (start ALL, then join ALL), or slots weren't filled\"",
+  "why": "Thread(target=f, args=(i, a)) takes a TUPLE; start all, then join all, or it's sequential."
+ },
+ {
+  "id": "11_concurrency.ex02", "level": "easy",
+  "prompt": "Define `increment()`: read counter['value'], call `pause()` (provided), then write back value + 1. It must stay correct when 8 threads call it at once.",
+  "given": "import threading\ncounter = {\"value\": 0}\nlock = threading.Lock()",
+  "setup": "import time as _time\n_held = []\ndef pause():\n    _held.append(lock.locked())\n    _time.sleep(0)",
+  "answer": "def increment():\n    with lock:\n        v = counter[\"value\"]\n        pause()\n        counter[\"value\"] = v + 1",
+  "check": "import threading as _th, time as _time\ndef _hammer():\n    for _ in range(100):\n        increment()\n_ts = [_th.Thread(target=_hammer, daemon=True) for _ in range(8)]\nfor _t in _ts:\n    _t.start()\n_end = _time.perf_counter() + 1.5\nfor _t in _ts:\n    _t.join(max(0, _end - _time.perf_counter()))\nassert not any(_t.is_alive() for _t in _ts), \"threads hung: deadlock? (acquire without release, or locking twice)\"\nassert _held and all(_held), \"pause() ran without the lock held: put the whole read-pause-write inside `with lock:`\"\nassert not lock.locked(), \"lock still held after increment(): use `with lock:`\"\nassert counter[\"value\"] == 800, f\"{counter['value']} != 800: lost updates\"",
+  "why": "`with lock:` around the WHOLE read-modify-write; locking just the write still loses updates."
+ },
+ {
+  "id": "11_concurrency.ex03", "level": "easy",
+  "prompt": "Import ThreadPoolExecutor and use one with max_workers=2 to build `result = {url: fetch(url)}`. fetch is provided and blocking.",
+  "given": "urls = [\"a\", \"b\", \"c\", \"d\"]",
+  "setup": "import threading as _th, time as _time\n_st = {\"now\": 0, \"peak\": 0}\n_lk = _th.Lock()\ndef fetch(u):\n    with _lk:\n        _st[\"now\"] += 1\n        _st[\"peak\"] = max(_st[\"peak\"], _st[\"now\"])\n    _time.sleep(0.05)\n    with _lk:\n        _st[\"now\"] -= 1\n    return u.upper()",
+  "answer": "from concurrent.futures import ThreadPoolExecutor\nwith ThreadPoolExecutor(max_workers=2) as pool:\n    result = dict(zip(urls, pool.map(fetch, urls)))",
+  "check": "assert result == {\"a\": \"A\", \"b\": \"B\", \"c\": \"C\", \"d\": \"D\"}, result\nassert _st[\"peak\"] == 2, f\"peak concurrent fetches was {_st['peak']}, want 2 (max_workers=2, and actually in the pool)\"",
+  "why": "with ThreadPoolExecutor(max_workers=N) as pool: pool.map(f, xs) yields results in INPUT order."
+ },
+ {
+  "id": "11_concurrency.ex04", "level": "easy",
+  "prompt": "Write `async def main()` that awaits fetch(u) for every url CONCURRENTLY and returns the results in input order, then set `result` by running it. fetch is an async function (provided).",
+  "given": "import asyncio\nurls = [\"a\", \"b\", \"c\"]",
+  "setup": "import asyncio as _aio\n_st = {\"now\": 0, \"peak\": 0}\nasync def fetch(u):\n    _st[\"now\"] += 1\n    _st[\"peak\"] = max(_st[\"peak\"], _st[\"now\"])\n    await _aio.sleep(0.01)\n    _st[\"now\"] -= 1\n    if u == \"bad\":\n        raise KeyError(u)\n    return u.upper()",
+  "answer": "async def main():\n    return await asyncio.gather(*(fetch(u) for u in urls))\nresult = asyncio.run(main())",
+  "check": "assert result == [\"A\", \"B\", \"C\"], result\nassert _st[\"peak\"] == 3, f\"peak in flight was {_st['peak']}: awaiting in a loop is sequential, use asyncio.gather(*coros)\"",
+  "why": "asyncio.gather(*coros) runs them together and returns results in argument order; asyncio.run(main()) is the entry point."
+ },
+ {
+  "id": "11_concurrency.ex05", "level": "medium",
+  "prompt": "Define `book(room, start, end) -> bool`: if (start, end) overlaps any (s, e) in rooms[room] (half-open), return False; otherwise call `pause()` (provided), append it, return True. Two threads racing for one slot: exactly one wins.",
+  "given": "import threading\nfrom collections import defaultdict\nrooms = defaultdict(list)\nlock = threading.Lock()",
+  "setup": "import time as _time\n_held = []\ndef pause():\n    _held.append(lock.locked())\n    _time.sleep(0.005)",
+  "answer": "def book(room, start, end):\n    with lock:\n        if any(start < e and s < end for s, e in rooms[room]):\n            return False\n        pause()\n        rooms[room].append((start, end))\n        return True",
+  "check": "import threading as _th\nassert book(\"A\", 9, 11) is True\nassert book(\"A\", 10, 12) is False, \"10-12 overlaps 9-11\"\nassert book(\"A\", 11, 12) is True, \"touching (end == start) is not an overlap\"\nassert _held and all(_held), \"pause() ran without the lock held\"\nrooms.clear()\n_gate, _wins = _th.Barrier(8), []\ndef _try():\n    _gate.wait()\n    _wins.append(book(\"R\", 9, 10))\n_ts = [_th.Thread(target=_try, daemon=True) for _ in range(8)]\nfor _t in _ts:\n    _t.start()\nfor _t in _ts:\n    _t.join(1)\nassert _wins.count(True) == 1, f\"{_wins.count(True)} threads booked R 9-10: hold the lock across the CHECK and the insert\"\nassert rooms[\"R\"] == [(9, 10)], rooms[\"R\"]",
+  "why": "Check-then-act must be ONE locked step: `with lock:` around both the overlap check and the append."
+ },
+ {
+  "id": "11_concurrency.ex06", "level": "medium",
+  "prompt": "In a thread pool, submit fetch(u) for every url; as each one FINISHES append (url, outcome) to `out`, where outcome is the return value or the exception instance. Import what you need.",
+  "given": "urls = [\"slow\", \"bad\", \"fast\"]   # fetch is provided; \"bad\" raises ValueError\nout = []",
+  "setup": "import time as _time\n_delays = {\"slow\": 0.12, \"bad\": 0.06, \"fast\": 0.0}\ndef fetch(u):\n    _time.sleep(_delays[u])\n    if u == \"bad\":\n        raise ValueError(\"bad url\")\n    return u.upper()",
+  "answer": "from concurrent.futures import ThreadPoolExecutor, as_completed\nwith ThreadPoolExecutor() as pool:\n    futs = {pool.submit(fetch, u): u for u in urls}\n    for f in as_completed(futs):\n        err = f.exception()\n        out.append((futs[f], err if err is not None else f.result()))",
+  "check": "assert [u for u, _ in out] == [\"fast\", \"bad\", \"slow\"], f\"{[u for u, _ in out]}: iterate as_completed(futures), not the submit order\"\nassert isinstance(dict(out)[\"bad\"], ValueError), f\"failed fetch should map to its exception instance, got {dict(out)['bad']!r}\"\nassert dict(out)[\"slow\"] == \"SLOW\" and dict(out)[\"fast\"] == \"FAST\", out",
+  "why": "{pool.submit(f, x): x} + as_completed(futs) gives completion order; fut.exception() returns the error, fut.result() re-raises it."
+ },
+ {
+  "id": "11_concurrency.ex07", "level": "medium",
+  "prompt": "Run fn() in `pool` and wait at most 0.05s: set `outcome = (True, result)`, or `(False, None)` if it timed out. Return right away on timeout (don't wait for the stuck thread) and always shut the pool down.",
+  "given": "import time\nfrom concurrent.futures import ThreadPoolExecutor\nfn = lambda: time.sleep(0.3) or \"done\"\npool = ThreadPoolExecutor(max_workers=1)",
+  "setup": "import time as _time\n_t0 = _time.perf_counter()",
+  "answer": "from concurrent.futures import TimeoutError as FutureTimeoutError\ntry:\n    outcome = (True, pool.submit(fn).result(timeout=0.05))\nexcept FutureTimeoutError:\n    outcome = (False, None)\nfinally:\n    pool.shutdown(wait=False)",
+  "check": "_el = _time.perf_counter() - _t0\nassert outcome == (False, None), outcome\nassert _el < 0.2, f\"took {_el:.2f}s for a 0.05s timeout: shutdown(wait=True) (or `with`) waits for the stuck thread\"\nassert pool._shutdown, \"pool never shut down: pool.shutdown(wait=False) in a finally\"\nrerun(fn=lambda: 42, pool=ThreadPoolExecutor(max_workers=1))\nassert outcome == (True, 42), outcome",
+  "why": "fut.result(timeout=) raises concurrent.futures.TimeoutError (NOT the builtin in 3.10); shutdown(wait=False) to stop waiting."
+ },
+ {
+  "id": "11_concurrency.ex08", "level": "medium",
+  "prompt": "Write `consume()`: loop taking items from `q` until it gets the `_DONE` sentinel, appending handle(item) to `results`. Then, as the producer, put every item on `q` followed by enough sentinels to stop `n_consumers` consumers.",
+  "given": "import queue\nq = queue.Queue()\n_DONE = object()\nitems, n_consumers = [1, 2, 3], 3\nresults = []\nhandle = lambda x: x * 10",
+  "answer": "def consume():\n    while (item := q.get()) is not _DONE:\n        results.append(handle(item))\nfor x in items:\n    q.put(x)\nfor _ in range(n_consumers):\n    q.put(_DONE)",
+  "check": "import threading as _th, time as _time\n_ts = [_th.Thread(target=consume, daemon=True) for _ in range(n_consumers)]\nfor _t in _ts:\n    _t.start()\n_end = _time.perf_counter() + 1.0\nfor _t in _ts:\n    _t.join(max(0, _end - _time.perf_counter()))\n_stuck = sum(_t.is_alive() for _t in _ts)\nassert not _stuck, f\"{_stuck} consumer(s) still blocked on q.get(): put ONE _DONE per consumer\"\nassert sorted(results) == [10, 20, 30], results",
+  "why": "One sentinel per consumer; `while (item := q.get()) is not _DONE:` is the consumer loop."
+ },
+ {
+  "id": "11_concurrency.ex09", "level": "medium",
+  "prompt": "Write `run()` for a background ticker: call on_tick() immediately, then again every `interval` seconds, until `stop_ev` is set. stop_ev.set() must end it at once, not after the 5s interval.",
+  "given": "import threading\nstop_ev = threading.Event()\ninterval = 5.0\nticks = []\non_tick = lambda: ticks.append(1)",
+  "answer": "def run():\n    while not stop_ev.is_set():\n        on_tick()\n        stop_ev.wait(interval)",
+  "check": "import threading as _th, time as _time\n_t = _th.Thread(target=run, daemon=True)\n_t.start()\n_end = _time.perf_counter() + 1\nwhile not ticks and _time.perf_counter() < _end:\n    _time.sleep(0.005)\nassert ticks, \"on_tick() should run right away\"\nstop_ev.set()\n_t.join(0.5)\nassert not _t.is_alive(), \"run() didn't stop promptly: wait with stop_ev.wait(interval), time.sleep can't be interrupted\"\nassert len(ticks) == 1, f\"{len(ticks)} ticks with a 5s interval\"\nticks.clear()\nstop_ev, interval = threading.Event(), 0.01\n_t = _th.Thread(target=run, daemon=True)\n_t.start()\n_time.sleep(0.15)\nstop_ev.set()\n_t.join(0.5)\nassert len(ticks) >= 3, f\"only {len(ticks)} ticks in 0.15s at interval=0.01: pass the interval as wait's timeout\"",
+  "why": "ev.wait(timeout) is an interruptible sleep: returns True the moment ev.set() is called."
+ },
+ {
+  "id": "11_concurrency.ex10", "level": "medium",
+  "prompt": "Write `async def main()` that runs fetch(u) for every url concurrently and returns {url: result or the exception instance}. One failure must not lose the other results.",
+  "given": "import asyncio\nurls = [\"a\", \"bad\", \"b\"]   # fetch is provided (async); \"bad\" raises KeyError",
+  "setup": "import asyncio as _aio\n_st = {\"now\": 0, \"peak\": 0}\nasync def fetch(u):\n    _st[\"now\"] += 1\n    _st[\"peak\"] = max(_st[\"peak\"], _st[\"now\"])\n    await _aio.sleep(0.01)\n    _st[\"now\"] -= 1\n    if u == \"bad\":\n        raise KeyError(u)\n    return u.upper()",
+  "answer": "async def main():\n    res = await asyncio.gather(*(fetch(u) for u in urls), return_exceptions=True)\n    return dict(zip(urls, res))",
+  "check": "try:\n    result = asyncio.run(main())\nexcept KeyError:\n    raise AssertionError(\"gather raised the first error and lost the rest: pass return_exceptions=True\") from None\nassert isinstance(result[\"bad\"], KeyError), f\"expected the KeyError instance, got {result['bad']!r}\"\nassert result[\"a\"] == \"A\" and result[\"b\"] == \"B\", result\nassert _st[\"peak\"] == 3, f\"peak in flight was {_st['peak']}: run them with gather, not one by one\"",
+  "why": "gather(*coros, return_exceptions=True) returns errors as values; without it the first error raises and you lose the rest."
+ },
+ {
+  "id": "11_concurrency.ex11", "level": "advanced",
+  "prompt": "Write `async def main()` that fetches every url concurrently but never more than `limit` in flight at once; return results in input order.",
+  "given": "import asyncio\nurls = [str(i) for i in range(10)]\nlimit = 3",
+  "setup": "import asyncio as _aio\n_st = {\"now\": 0, \"peak\": 0}\nasync def fetch(u):\n    _st[\"now\"] += 1\n    _st[\"peak\"] = max(_st[\"peak\"], _st[\"now\"])\n    await _aio.sleep(0.01)\n    _st[\"now\"] -= 1\n    return u * 2",
+  "answer": "async def main():\n    sem = asyncio.Semaphore(limit)\n    async def one(u):\n        async with sem:\n            return await fetch(u)\n    return await asyncio.gather(*(one(u) for u in urls))",
+  "check": "assert asyncio.run(main()) == [u * 2 for u in urls], \"results in input order\"\nassert _st[\"peak\"] == 3, f\"peak in flight was {_st['peak']}, want 3: `async with sem:` around each single fetch\"\n_st[\"peak\"] = 0\nrerun(limit=1)\nassert asyncio.run(main()) == [u * 2 for u in urls]\nassert _st[\"peak\"] == 1, f\"limit=1 gave peak {_st['peak']}\"",
+  "why": "asyncio.Semaphore(n) + `async with sem:` inside a per-item coroutine, then gather them all."
+ },
+ {
+  "id": "11_concurrency.ex12", "level": "advanced",
+  "prompt": "Define `async def retry(op, attempts=3, timeout=1.0, base_delay=0.1)`. op is an async FUNCTION: each attempt awaits a fresh op() cut off after `timeout` seconds. On any Exception, if attempts remain `await sleep(base_delay * 2**i)` (sleep is provided) and try again; after the last attempt re-raise.",
+  "given": "import asyncio\n# sleep(d) is provided: an async fake that records d instead of waiting",
+  "setup": "delays = []\nasync def sleep(d):\n    delays.append(d)",
+  "answer": "async def retry(op, attempts=3, timeout=1.0, base_delay=0.1):\n    for i in range(attempts):\n        try:\n            return await asyncio.wait_for(op(), timeout)\n        except Exception:\n            if i == attempts - 1:\n                raise\n            await sleep(base_delay * 2 ** i)",
+  "check": "import time as _time\n_n = {\"calls\": 0}\nasync def _flaky():\n    _n[\"calls\"] += 1\n    if _n[\"calls\"] < 3:\n        raise ConnectionError(\"try again\")\n    return \"ok\"\nassert asyncio.run(retry(_flaky)) == \"ok\"\nassert _n[\"calls\"] == 3, _n\nassert delays == [0.1, 0.2], f\"{delays}: want backoff 0.1 then 0.2\"\ndelays.clear()\nasync def _always_bad():\n    raise ValueError(\"nope\")\ntry:\n    asyncio.run(retry(_always_bad))\nexcept ValueError:\n    pass\nelse:\n    raise AssertionError(\"after the last attempt, re-raise its exception\")\nassert delays == [0.1, 0.2], f\"{delays}: no sleep after the final failure\"\ndelays.clear()\n_n[\"calls\"] = 0\nasync def _hangs_once():\n    _n[\"calls\"] += 1\n    if _n[\"calls\"] == 1:\n        await asyncio.sleep(1)\n    return \"late-ok\"\n_t0 = _time.perf_counter()\nassert asyncio.run(retry(_hangs_once, timeout=0.05)) == \"late-ok\"\nassert _time.perf_counter() - _t0 < 0.5, \"a hung attempt wasn't cut off: await asyncio.wait_for(op(), timeout)\"",
+  "why": "asyncio.wait_for(op(), timeout) per attempt; call op() fresh each time (a coroutine can be awaited once); bare `raise` on the last."
+ },
+ {
+  "id": "11_concurrency.ex13", "level": "advanced",
+  "prompt": "Write `async def main()`: start `n_workers` worker() tasks, wait until every queued job is processed, then shut the workers down cleanly so no task is left pending when main returns.",
+  "given": "import asyncio\njobs = list(range(8))\nn_workers = 3\nq = asyncio.Queue()\nfor i, job in enumerate(jobs):\n    q.put_nowait((i, job))\nresults = [None] * len(jobs)\n\nasync def worker():   # handle is provided (async); job 5 raises\n    while True:\n        i, job = await q.get()\n        try:\n            results[i] = await handle(job)\n        except Exception as e:\n            results[i] = e\n        finally:\n            q.task_done()",
+  "setup": "import asyncio as _aio\n_st = {\"now\": 0, \"peak\": 0}\nasync def handle(job):\n    _st[\"now\"] += 1\n    _st[\"peak\"] = max(_st[\"peak\"], _st[\"now\"])\n    try:\n        await _aio.sleep(0.01)\n        if job == 5:\n            raise ValueError(\"job 5 is cursed\")\n        return job * 2\n    finally:\n        _st[\"now\"] -= 1",
+  "answer": "async def main():\n    workers = [asyncio.create_task(worker()) for _ in range(n_workers)]\n    await q.join()\n    for w in workers:\n        w.cancel()\n    await asyncio.gather(*workers, return_exceptions=True)",
+  "check": "async def _probe():\n    await main()\n    return [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]\n_left = asyncio.run(_probe())\nassert all(r == j * 2 for j, r in enumerate(results) if j != 5), f\"{results}: await q.join() before cancelling\"\nassert isinstance(results[5], ValueError), results[5]\nassert _st[\"peak\"] == 3, f\"peak concurrent jobs {_st['peak']}, want n_workers=3\"\nassert not _left, f\"{len(_left)} worker task(s) still pending: cancel them AND await asyncio.gather(*workers, return_exceptions=True)\"",
+  "why": "create_task workers, await q.join(), cancel each, then gather(*workers, return_exceptions=True) so the cancels land."
+ }
+]

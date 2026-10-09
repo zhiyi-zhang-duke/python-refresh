@@ -12,11 +12,15 @@ Check the solutions:  python 01_strings/solutions.py
 """
 
 import importlib.util
+import json
+import os
 import sys
 import traceback
 from pathlib import Path
 
-GREEN, RED, YELLOW, DIM, RESET = "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m"
+JSON_MARKER = "@@HARNESS_JSON@@"  # run_all.py --json sets HARNESS_JSON and reads this line
+
+GREEN, RED, YELLOW, DIM, RESET ="\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m"
 if not sys.stdout.isatty():
     GREEN = RED = YELLOW = DIM = RESET = ""
 
@@ -58,36 +62,44 @@ def run(module, file: str) -> int:
     print(f"\n{topic_dir.name}  ({Path(file).name})\n" + "-" * 60)
 
     counts = {"pass": 0, "fail": 0, "todo": 0}
+    results = []  # per-exercise, for run_all.py --json
     for name, fn in test_fns:
         num = int(name[len("test_ex"):].split("_")[0])
         if not _selected(num, arg):
             continue
         label = f"ex{num:02d}  {_first_line(fn.__doc__)}"
+        status, error = "pass", ""
         try:
             fn(module)
         except NotImplementedError:
-            counts["todo"] += 1
+            status = "todo"
             print(f"{DIM}  ·  {label}  (not started){RESET}")
         except AssertionError as e:
-            counts["fail"] += 1
+            status = "fail"
             print(f"{RED}  ✗  {label}{RESET}")
             msg = str(e) or _assert_line(e)
+            error = msg
             for line in msg.splitlines():
                 print(f"       {line}")
         # SystemExit/KeyboardInterrupt too: a stray sys.exit() or a Ctrl-C out of an
         # infinite loop fails that one exercise instead of killing the whole run.
         except (Exception, SystemExit, KeyboardInterrupt) as e:  # noqa: BLE001
-            counts["fail"] += 1
+            status = "fail"
+            error = f"{type(e).__name__}: {e}"
             print(f"{YELLOW}  !  {label}{RESET}")
-            print(f"       {type(e).__name__}: {e}")
+            print(f"       {error}")
             print(f"       {DIM}at {_learner_frame(e)}{RESET}")
         else:
-            counts["pass"] += 1
             print(f"{GREEN}  ✓  {label}{RESET}")
+        counts[status] += 1
+        results.append({"ex": num, "name": _first_line(fn.__doc__), "status": status,
+                        "error": " / ".join(ln.strip() for ln in error.splitlines() if ln.strip())[:300]})
 
     total = sum(counts.values())
     print("-" * 60)
     print(f"  {counts['pass']}/{total} passing   {counts['fail']} failing   {counts['todo']} not started\n")
+    if os.environ.get("HARNESS_JSON"):
+        print(JSON_MARKER + json.dumps(results))
     return counts["fail"] + counts["todo"]
 
 
